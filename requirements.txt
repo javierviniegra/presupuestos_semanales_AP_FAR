@@ -1,4 +1,5 @@
-Django>=6.1
+# Capped below 5.0: the dev/prod MariaDB is 10.4.32, and Django 5.0+ requires MariaDB 10.5+.
+Django>=4.2,<5.0
 mysqlclient>=2.2.8
 python-dotenv>=1.2.3
 openpyxl>=3.1.5
