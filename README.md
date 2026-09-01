@@ -64,5 +64,7 @@ pip install -r requirements.txt
 cp core/config/.env.example core/config/.env
 # fill in core/config/.env with real dev DB and Odoo credentials
 python manage.py migrate
-python manage.py runserver
+python manage.py runserver 8010
 ```
+
+Port 8010 is used instead of Django's default 8000 because 8000 is already taken by XAMPP on this machine.
