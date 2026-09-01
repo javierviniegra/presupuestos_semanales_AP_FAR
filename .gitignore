@@ -1,0 +1,30 @@
+# Security and Environment
+core/config/.env
+
+# Python Environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Django
+db.sqlite3
+staticfiles/
+media/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+
+# Local Data and Logs
+*.log
+logs/
+
+# Excel/PDF temporary files
+~$*.xlsx
+~$*.pdf
