@@ -1,0 +1,173 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard - Presupuestos AP</title>
+<style>
+  :root {
+    --verde: #035953;
+    --verde-oscuro: #023f3b;
+    --crema: #f0e9d8;
+    --texto: #2d2d2d;
+    --rojo: #ba2121;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--texto);
+    background: #f6f4ef;
+  }
+  header {
+    background: var(--verde-oscuro);
+    color: #fff;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 18px; }
+  header img { height: 32px; }
+  header a.logout { color: #cfe3e0; font-size: 13px; text-decoration: none; }
+  header a.logout:hover { text-decoration: underline; }
+
+  main { padding: 24px 32px 48px; max-width: 1200px; margin: 0 auto; }
+
+  .filtros {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 28px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .filtros label { font-weight: 600; font-size: 13px; color: #555; display: block; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: 13px; }
+  .chip input { margin-right: 4px; }
+
+  h2 { color: var(--verde-oscuro); font-size: 18px; margin: 32px 0 12px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  th {
+    background: var(--verde);
+    color: #fff;
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  td { padding: 10px 14px; font-size: 14px; border-top: 1px solid #eee; }
+  tr:nth-child(even) td { background: #fafaf7; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.restante-neg { color: var(--rojo); font-weight: 600; }
+  td.restante-pos { color: var(--verde-oscuro); font-weight: 600; }
+
+  .vacio { padding: 24px; text-align: center; color: #888; background: #fff; border-radius: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img src="{% static 'presupuestos/img/logo.png' %}" alt="Fonda Argentina">
+    Presupuestos AP - Sucursales
+  </div>
+  <div>
+    {{ request.user.get_username }}
+    &middot;
+    {% if request.user.is_staff %}<a class="logout" href="{% url 'admin:index' %}">Administrador</a> &middot;{% endif %}
+    <a class="logout" href="{% url 'logout' %}">Cerrar sesion</a>
+  </div>
+</header>
+
+<main>
+  {% if not restringido_a_una %}
+  <div class="filtros">
+    <label>Sucursales (últimas {{ semanas_a_mostrar }} semanas)</label>
+    <form method="get">
+      <div class="chips">
+        {% for suc in sucursales_disponibles %}
+        <label class="chip">
+          <input type="checkbox" name="sucursal" value="{{ suc.id }}" onchange="this.form.submit()"
+            {% if suc.id in sucursales_seleccionadas_ids %}checked{% endif %}>
+          {{ suc.nombre }}
+        </label>
+        {% endfor %}
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <h2>Presupuesto vs. gasto real</h2>
+  {% if tabla_general %}
+  <table>
+    <thead>
+      <tr>
+        <th>Sucursal</th>
+        <th>Semana</th>
+        <th class="num">Presupuesto</th>
+        <th class="num">Gasto real</th>
+        <th class="num">Restante</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fila in tabla_general %}
+      <tr>
+        <td>{{ fila.sucursal.nombre }}</td>
+        <td>{{ fila.semana|date:"d/m/Y" }}</td>
+        <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
+        <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
+        <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">
+          ${{ fila.restante|floatformat:2 }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="vacio">Sin datos de presupuesto ni gasto real en las últimas {{ semanas_a_mostrar }} semanas para la sucursal seleccionada.</div>
+  {% endif %}
+
+  <h2>Por tipo de gasto</h2>
+  {% if tabla_tipo %}
+  <table>
+    <thead>
+      <tr>
+        <th>Sucursal</th>
+        <th>Semana</th>
+        <th>Tipo de gasto</th>
+        <th class="num">Presupuesto</th>
+        <th class="num">Gasto real</th>
+        <th class="num">Restante</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fila in tabla_tipo %}
+      <tr>
+        <td>{{ fila.sucursal.nombre }}</td>
+        <td>{{ fila.semana|date:"d/m/Y" }}</td>
+        <td>{{ fila.tipo_gasto_nombre }}</td>
+        <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
+        <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
+        <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">
+          ${{ fila.restante|floatformat:2 }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="vacio">Sin datos por tipo de gasto en las últimas {{ semanas_a_mostrar }} semanas para la sucursal seleccionada.</div>
+  {% endif %}
+</main>
+</body>
+</html>
