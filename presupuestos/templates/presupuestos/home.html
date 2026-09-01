@@ -1,0 +1,109 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Presupuestos AP - Sucursales</title>
+<style>
+  :root {
+    --verde: #035953;
+    --verde-oscuro: #023f3b;
+    --crema: #f0e9d8;
+    --texto: #2d2d2d;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: radial-gradient(circle at top left, #0a6f68 0%, var(--verde) 45%, var(--verde-oscuro) 100%);
+    color: var(--texto);
+    padding: 24px;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    max-width: 480px;
+    width: 100%;
+    padding: 48px 40px;
+    text-align: center;
+  }
+
+  .logo {
+    width: 120px;
+    height: auto;
+    margin-bottom: 24px;
+  }
+
+  .badge {
+    display: inline-block;
+    background: var(--crema);
+    color: var(--verde-oscuro);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px;
+    color: var(--verde-oscuro);
+  }
+
+  p.subtitle {
+    margin: 0 0 24px;
+    color: #666;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .btn {
+    display: inline-block;
+    background: var(--verde);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 16px;
+    padding: 14px 36px;
+    border-radius: 10px;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .btn:hover {
+    background: var(--verde-oscuro);
+    transform: translateY(-1px);
+  }
+
+  footer {
+    margin-top: 28px;
+    font-size: 12px;
+    color: #999;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="{% static 'presupuestos/img/logo.png' %}" alt="Fonda Argentina">
+    <div class="badge">Cuentas por Pagar &middot; AP</div>
+    <h1>Control de Presupuestos por Sucursal</h1>
+    <p class="subtitle">
+      Seguimiento semanal de presupuesto contra gasto real por sucursal,
+      sincronizado con Odoo y clasificado por tipo de gasto.
+    </p>
+    <a class="btn" href="{% url 'admin:index' %}">Entrar al Sistema</a>
+    <footer>Fonda Argentina</footer>
+  </div>
+</body>
+</html>
