@@ -37,7 +37,7 @@ class CuentaContableTipoGasto(models.Model):
 
     odoo_account_id = models.IntegerField(unique=True)
     odoo_account_name = models.CharField(max_length=255)
-    tipo_gasto = models.ForeignKey(TipoGasto, on_delete=models.PROTECT)
+    tipo_gasto = models.ForeignKey(TipoGasto, on_delete=models.PROTECT, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -57,7 +57,7 @@ class CategoriaProductoTipoGasto(models.Model):
 
     odoo_category_id = models.IntegerField(unique=True)
     odoo_category_name = models.CharField(max_length=255)
-    tipo_gasto = models.ForeignKey(TipoGasto, on_delete=models.PROTECT)
+    tipo_gasto = models.ForeignKey(TipoGasto, on_delete=models.PROTECT, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
