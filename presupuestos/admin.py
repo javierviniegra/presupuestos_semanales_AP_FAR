@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    Categoria,
     CategoriaProductoTipoGasto,
     CuentaContableTipoGasto,
     GastoReal,
@@ -18,9 +19,16 @@ class SucursalAdmin(admin.ModelAdmin):
     search_fields = ["nombre"]
 
 
+@admin.register(Categoria)
+class CategoriaAdmin(admin.ModelAdmin):
+    list_display = ["nombre"]
+    search_fields = ["nombre"]
+
+
 @admin.register(TipoGasto)
 class TipoGastoAdmin(admin.ModelAdmin):
-    list_display = ["nombre", "descripcion"]
+    list_display = ["nombre", "categoria", "descripcion"]
+    list_filter = ["categoria"]
     search_fields = ["nombre"]
 
 

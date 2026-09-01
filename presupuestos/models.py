@@ -16,13 +16,30 @@ class Sucursal(models.Model):
         return self.nombre
 
 
+class Categoria(models.Model):
+    """
+    Top-level P&L bucket: Costo de Ventas (COGS) vs Gasto Operativo (opex).
+    Fully editable from the app - not hardcoded to just these two.
+    """
+
+    nombre = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        verbose_name_plural = "categorias"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class TipoGasto(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
+    categoria = models.ForeignKey(Categoria, on_delete=models.PROTECT, related_name="tipos_gasto")
     descripcion = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["nombre"]
+        ordering = ["categoria__nombre", "nombre"]
 
     def __str__(self):
         return self.nombre
