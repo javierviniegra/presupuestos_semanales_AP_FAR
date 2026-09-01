@@ -1,0 +1,26 @@
+/* Fonda Argentina brand color (#035953, verified from fondaargentina.com
+   nav/button elements) applied over Django admin's default CSS variables. */
+
+:root {
+    --primary: #035953;
+    --secondary: #023f3b;
+    --accent: #e8dcc0;
+    --primary-fg: #fff;
+
+    --header-color: #f0e9d8;
+    --header-branding-color: var(--accent);
+    --header-bg: var(--secondary);
+    --header-link-color: var(--primary-fg);
+
+    --breadcrumbs-fg: #cfe3e0;
+    --breadcrumbs-bg: var(--primary);
+
+    --link-fg: #035953;
+    --link-hover-color: #023f3b;
+    --link-selected-fg: #04746c;
+
+    --button-bg: var(--primary);
+    --button-hover-bg: #04746c;
+    --default-button-bg: var(--secondary);
+    --default-button-hover-bg: #012b28;
+}

@@ -11,6 +11,10 @@ from .models import (
     TipoGasto,
 )
 
+admin.site.site_header = "Presupuestos AP - Sucursales"
+admin.site.site_title = "Presupuestos AP"
+admin.site.index_title = "Administracion"
+
 
 @admin.register(Sucursal)
 class SucursalAdmin(admin.ModelAdmin):

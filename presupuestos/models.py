@@ -11,6 +11,8 @@ class Sucursal(models.Model):
 
     class Meta:
         ordering = ["nombre"]
+        verbose_name = "sucursal"
+        verbose_name_plural = "sucursales"
 
     def __str__(self):
         return self.nombre
@@ -25,8 +27,9 @@ class Categoria(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
 
     class Meta:
-        verbose_name_plural = "categorias"
         ordering = ["nombre"]
+        verbose_name = "categoria"
+        verbose_name_plural = "categorias"
 
     def __str__(self):
         return self.nombre
@@ -40,6 +43,8 @@ class TipoGasto(models.Model):
 
     class Meta:
         ordering = ["categoria__nombre", "nombre"]
+        verbose_name = "tipo de gasto"
+        verbose_name_plural = "tipos de gasto"
 
     def __str__(self):
         return self.nombre
@@ -59,6 +64,8 @@ class CuentaContableTipoGasto(models.Model):
 
     class Meta:
         ordering = ["odoo_account_name"]
+        verbose_name = "cuenta contable -> tipo de gasto"
+        verbose_name_plural = "cuentas contables -> tipo de gasto"
 
     def __str__(self):
         return f"{self.odoo_account_name} -> {self.tipo_gasto}"
@@ -79,6 +86,8 @@ class CategoriaProductoTipoGasto(models.Model):
 
     class Meta:
         ordering = ["odoo_category_name"]
+        verbose_name = "categoria de producto -> tipo de gasto"
+        verbose_name_plural = "categorias de producto -> tipo de gasto"
 
     def __str__(self):
         return f"{self.odoo_category_name} -> {self.tipo_gasto}"
@@ -100,6 +109,8 @@ class Presupuesto(models.Model):
             )
         ]
         ordering = ["-semana", "sucursal", "tipo_gasto"]
+        verbose_name = "presupuesto"
+        verbose_name_plural = "presupuestos"
 
     def __str__(self):
         return f"{self.sucursal} / {self.tipo_gasto} / {self.semana} = {self.monto}"
@@ -142,6 +153,8 @@ class GastoReal(models.Model):
             models.Index(fields=["sucursal", "semana"]),
             models.Index(fields=["sucursal", "tipo_gasto", "semana"]),
         ]
+        verbose_name = "gasto real"
+        verbose_name_plural = "gastos reales"
 
     def __str__(self):
         return f"{self.factura_numero} / {self.proveedor_nombre} / {self.monto}"
@@ -159,6 +172,10 @@ class PerfilUsuario(models.Model):
         Sucursal, on_delete=models.SET_NULL, null=True, blank=True, related_name="usuarios"
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "perfil de usuario"
+        verbose_name_plural = "perfiles de usuario"
 
     def __str__(self):
         return f"Perfil de {self.user}"
