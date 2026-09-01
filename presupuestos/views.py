@@ -6,7 +6,11 @@ from django.shortcuts import render
 
 from .models import GastoReal, Presupuesto, Sucursal, TipoGasto
 
-SEMANAS_A_MOSTRAR = 12
+SEMANAS_POR_DEFECTO = 12
+OPCIONES_SEMANAS = [4, 8, 12, 26, 52]
+
+OPCIONES_AGRUPAR_GENERAL = [("semana", "Semana"), ("sucursal", "Sucursal")]
+OPCIONES_AGRUPAR_TIPO = [("tipo_gasto", "Tipo de gasto"), ("semana", "Semana"), ("sucursal", "Sucursal")]
 
 
 def home(request):
@@ -34,6 +38,38 @@ def _sucursales_para_usuario(user):
     return Sucursal.objects.filter(activa=True).order_by("nombre"), False
 
 
+def _clave_grupo(fila, campo):
+    if campo == "semana":
+        return fila["semana"], fila["semana"].strftime("%d/%m/%Y")
+    if campo == "sucursal":
+        return fila["sucursal"].id, fila["sucursal"].nombre
+    if campo == "tipo_gasto":
+        return fila["tipo_gasto_nombre"], fila["tipo_gasto_nombre"]
+    return None, "Todos"
+
+
+def _agrupar(filas, campo):
+    grupos = {}
+    orden = []
+    for fila in filas:
+        clave, etiqueta = _clave_grupo(fila, campo)
+        if clave not in grupos:
+            grupos[clave] = {"clave": clave, "etiqueta": etiqueta, "filas": [], "presupuesto": 0, "gasto_real": 0, "restante": 0}
+            orden.append(clave)
+        g = grupos[clave]
+        g["filas"].append(fila)
+        g["presupuesto"] += fila["presupuesto"]
+        g["gasto_real"] += fila["gasto_real"]
+        g["restante"] += fila["restante"]
+
+    if campo == "semana":
+        orden.sort(reverse=True)
+    else:
+        orden.sort(key=lambda k: grupos[k]["etiqueta"])
+
+    return [grupos[k] for k in orden]
+
+
 @login_required
 def dashboard(request):
     sucursales_disponibles, restringido_a_una = _sucursales_para_usuario(request.user)
@@ -47,9 +83,15 @@ def dashboard(request):
         else:
             sucursales_seleccionadas = list(sucursales_disponibles)
 
+    try:
+        num_semanas = int(request.GET.get("semanas", SEMANAS_POR_DEFECTO))
+    except ValueError:
+        num_semanas = SEMANAS_POR_DEFECTO
+    num_semanas = max(1, min(num_semanas, 52))
+
     hoy = date.today()
     semana_actual = _lunes_de_semana(hoy)
-    semanas = [semana_actual - timedelta(weeks=i) for i in range(SEMANAS_A_MOSTRAR)]
+    semanas = [semana_actual - timedelta(weeks=i) for i in range(num_semanas)]
 
     presupuestos = Presupuesto.objects.filter(sucursal__in=sucursales_seleccionadas, semana__in=semanas)
     gastos = GastoReal.objects.filter(sucursal__in=sucursales_seleccionadas, semana__in=semanas)
@@ -63,23 +105,18 @@ def dashboard(request):
         for r in gastos.values("sucursal_id", "semana").annotate(total=Sum("monto"))
     }
 
-    tabla_general = []
+    sucursales_por_id = {s.id: s for s in sucursales_seleccionadas}
+
+    filas_general = []
     for suc in sucursales_seleccionadas:
         for sem in semanas:
             clave = (suc.id, sem)
             presupuesto = pres_general.get(clave) or 0
             gasto = gasto_general.get(clave) or 0
             if presupuesto or gasto:
-                tabla_general.append(
-                    {
-                        "sucursal": suc,
-                        "semana": sem,
-                        "presupuesto": presupuesto,
-                        "gasto_real": gasto,
-                        "restante": presupuesto - gasto,
-                    }
+                filas_general.append(
+                    {"sucursal": suc, "semana": sem, "presupuesto": presupuesto, "gasto_real": gasto, "restante": presupuesto - gasto}
                 )
-    tabla_general.sort(key=lambda r: (r["semana"], r["sucursal"].nombre), reverse=True)
 
     pres_por_tipo = {
         (r["sucursal_id"], r["semana"], r["tipo_gasto_id"]): r["total"]
@@ -91,17 +128,16 @@ def dashboard(request):
     }
 
     tipos_gasto = {t.id: t.nombre for t in TipoGasto.objects.all()}
-    sucursales_por_id = {s.id: s for s in sucursales_seleccionadas}
     claves = set(pres_por_tipo) | set(gasto_por_tipo)
 
-    tabla_tipo = []
+    filas_tipo = []
     for suc_id, sem, tipo_id in claves:
         suc = sucursales_por_id.get(suc_id)
         if not suc:
             continue
         presupuesto = pres_por_tipo.get((suc_id, sem, tipo_id)) or 0
         gasto = gasto_por_tipo.get((suc_id, sem, tipo_id)) or 0
-        tabla_tipo.append(
+        filas_tipo.append(
             {
                 "sucursal": suc,
                 "semana": sem,
@@ -111,14 +147,26 @@ def dashboard(request):
                 "restante": presupuesto - gasto,
             }
         )
-    tabla_tipo.sort(key=lambda r: (r["semana"], r["sucursal"].nombre, r["tipo_gasto_nombre"]), reverse=True)
+
+    agrupar_general = request.GET.get("g_agrupar", "semana")
+    if agrupar_general not in dict(OPCIONES_AGRUPAR_GENERAL):
+        agrupar_general = "semana"
+
+    agrupar_tipo = request.GET.get("t_agrupar", "tipo_gasto")
+    if agrupar_tipo not in dict(OPCIONES_AGRUPAR_TIPO):
+        agrupar_tipo = "tipo_gasto"
 
     context = {
         "sucursales_disponibles": sucursales_disponibles,
         "sucursales_seleccionadas_ids": {s.id for s in sucursales_seleccionadas},
         "restringido_a_una": restringido_a_una,
-        "tabla_general": tabla_general,
-        "tabla_tipo": tabla_tipo,
-        "semanas_a_mostrar": SEMANAS_A_MOSTRAR,
+        "num_semanas": num_semanas,
+        "opciones_semanas": OPCIONES_SEMANAS,
+        "grupos_general": _agrupar(filas_general, agrupar_general),
+        "grupos_tipo": _agrupar(filas_tipo, agrupar_tipo),
+        "agrupar_general": agrupar_general,
+        "agrupar_tipo": agrupar_tipo,
+        "opciones_agrupar_general": OPCIONES_AGRUPAR_GENERAL,
+        "opciones_agrupar_tipo": OPCIONES_AGRUPAR_TIPO,
     }
     return render(request, "presupuestos/dashboard.html", context)

@@ -12,6 +12,7 @@
     --crema: #f0e9d8;
     --texto: #2d2d2d;
     --rojo: #ba2121;
+    --borde: #dcdcdc;
   }
   * { box-sizing: border-box; }
   body {
@@ -35,40 +36,160 @@
 
   main { padding: 24px 32px 48px; max-width: 1200px; margin: 0 auto; }
 
+  /* --- Odoo-style filter bar --- */
   .filtros {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
     background: #fff;
-    border-radius: 12px;
-    padding: 16px 20px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 10px 12px;
     margin-bottom: 28px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   }
-  .filtros label { font-weight: 600; font-size: 13px; color: #555; display: block; margin-bottom: 8px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { font-size: 13px; }
-  .chip input { margin-right: 4px; }
-
-  h2 { color: var(--verde-oscuro); font-size: 18px; margin: 32px 0 12px; }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  .filtro-dropdown { position: relative; }
+  .filtro-dropdown summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 7px 14px;
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--verde-oscuro);
+    background: #fafafa;
+    user-select: none;
+  }
+  .filtro-dropdown summary::-webkit-details-marker { display: none; }
+  .filtro-dropdown summary:after { content: " \25BE"; }
+  .filtro-dropdown[open] summary { background: var(--crema); }
+  .filtro-panel {
+    position: absolute;
+    top: 110%;
+    left: 0;
+    z-index: 20;
     background: #fff;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    width: 280px;
+    padding: 10px;
   }
-  th {
+  .filtro-panel input[type="text"] {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  .filtro-acciones { display: flex; gap: 8px; margin-bottom: 8px; }
+  .filtro-acciones button {
+    flex: 1;
+    border: 1px solid var(--borde);
+    background: #fafafa;
+    color: var(--verde-oscuro);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 0;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .filtro-acciones button:hover { background: var(--crema); }
+  .filtro-lista { max-height: 260px; overflow-y: auto; }
+  .filtro-lista label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    padding: 5px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .filtro-lista label:hover { background: #f2f2f2; }
+  .filtro-lista .oculto { display: none; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--crema);
+    color: var(--verde-oscuro);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 999px;
+  }
+  .chip button {
+    border: none;
+    background: none;
+    color: var(--verde-oscuro);
+    cursor: pointer;
+    font-weight: 700;
+    padding: 0;
+    line-height: 1;
+  }
+
+  select.filtro-select {
+    padding: 7px 10px;
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--verde-oscuro);
+    background: #fafafa;
+  }
+
+  .reporte { margin-top: 32px; }
+  .reporte-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .reporte-header h2 { color: var(--verde-oscuro); font-size: 18px; margin: 0; }
+  .agrupar-por { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .agrupar-por label { font-weight: 600; color: #555; }
+
+  .grupo {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .grupo > summary {
+    list-style: none;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 1fr 140px 140px 140px;
+    align-items: center;
+    padding: 12px 16px;
     background: var(--verde);
     color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .grupo > summary::-webkit-details-marker { display: none; }
+  .grupo > summary:before { content: "\25B8 "; }
+  .grupo[open] > summary:before { content: "\25BE "; }
+  .grupo > summary .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    background: #f2f2ee;
+    color: #555;
     text-align: left;
-    padding: 10px 14px;
-    font-size: 13px;
+    padding: 8px 16px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
-  td { padding: 10px 14px; font-size: 14px; border-top: 1px solid #eee; }
+  td { padding: 8px 16px; font-size: 14px; border-top: 1px solid #eee; }
   tr:nth-child(even) td { background: #fafaf7; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.restante-neg { color: var(--rojo); font-weight: 600; }
   td.restante-pos { color: var(--verde-oscuro); font-weight: 600; }
 
@@ -90,84 +211,172 @@
 </header>
 
 <main>
-  {% if not restringido_a_una %}
-  <div class="filtros">
-    <label>Sucursales (últimas {{ semanas_a_mostrar }} semanas)</label>
-    <form method="get">
+  <form method="get" id="form-filtros">
+    <div class="filtros">
+      {% if not restringido_a_una %}
+      <details class="filtro-dropdown">
+        <summary>Sucursales ({{ sucursales_seleccionadas_ids|length }})</summary>
+        <div class="filtro-panel">
+          <input type="text" placeholder="Buscar sucursal..." oninput="filtrarLista(this)">
+          <div class="filtro-acciones">
+            <button type="button" onclick="marcarTodas(this, true)">Todas</button>
+            <button type="button" onclick="marcarTodas(this, false)">Ninguna</button>
+          </div>
+          <div class="filtro-lista">
+            {% for suc in sucursales_disponibles %}
+            <label data-texto="{{ suc.nombre|lower }}">
+              <input type="checkbox" name="sucursal" value="{{ suc.id }}" onchange="this.form.submit()"
+                {% if suc.id in sucursales_seleccionadas_ids %}checked{% endif %}>
+              {{ suc.nombre }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </details>
+      {% endif %}
+
+      <select class="filtro-select" name="semanas" onchange="this.form.submit()">
+        {% for n in opciones_semanas %}
+        <option value="{{ n }}" {% if n == num_semanas %}selected{% endif %}>Ultimas {{ n }} semanas</option>
+        {% endfor %}
+      </select>
+
+      {% if not restringido_a_una %}
       <div class="chips">
         {% for suc in sucursales_disponibles %}
-        <label class="chip">
-          <input type="checkbox" name="sucursal" value="{{ suc.id }}" onchange="this.form.submit()"
-            {% if suc.id in sucursales_seleccionadas_ids %}checked{% endif %}>
-          {{ suc.nombre }}
-        </label>
+          {% if suc.id in sucursales_seleccionadas_ids %}
+          <span class="chip">
+            {{ suc.nombre }}
+            <button type="submit" name="quitar_sucursal" value="{{ suc.id }}" title="Quitar" onclick="return quitarSucursal(event, {{ suc.id }})">&times;</button>
+          </span>
+          {% endif %}
         {% endfor %}
       </div>
-    </form>
-  </div>
-  {% endif %}
+      {% endif %}
+    </div>
 
-  <h2>Presupuesto vs. gasto real</h2>
-  {% if tabla_general %}
-  <table>
-    <thead>
-      <tr>
-        <th>Sucursal</th>
-        <th>Semana</th>
-        <th class="num">Presupuesto</th>
-        <th class="num">Gasto real</th>
-        <th class="num">Restante</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for fila in tabla_general %}
-      <tr>
-        <td>{{ fila.sucursal.nombre }}</td>
-        <td>{{ fila.semana|date:"d/m/Y" }}</td>
-        <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
-        <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
-        <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">
-          ${{ fila.restante|floatformat:2 }}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="vacio">Sin datos de presupuesto ni gasto real en las últimas {{ semanas_a_mostrar }} semanas para la sucursal seleccionada.</div>
-  {% endif %}
+    <div class="reporte">
+      <div class="reporte-header">
+        <h2>Presupuesto vs. gasto real</h2>
+        <div class="agrupar-por">
+          <label>Agrupar por</label>
+          <select class="filtro-select" name="g_agrupar" onchange="this.form.submit()">
+            {% for valor, etiqueta in opciones_agrupar_general %}
+            <option value="{{ valor }}" {% if valor == agrupar_general %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
 
-  <h2>Por tipo de gasto</h2>
-  {% if tabla_tipo %}
-  <table>
-    <thead>
-      <tr>
-        <th>Sucursal</th>
-        <th>Semana</th>
-        <th>Tipo de gasto</th>
-        <th class="num">Presupuesto</th>
-        <th class="num">Gasto real</th>
-        <th class="num">Restante</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for fila in tabla_tipo %}
-      <tr>
-        <td>{{ fila.sucursal.nombre }}</td>
-        <td>{{ fila.semana|date:"d/m/Y" }}</td>
-        <td>{{ fila.tipo_gasto_nombre }}</td>
-        <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
-        <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
-        <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">
-          ${{ fila.restante|floatformat:2 }}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="vacio">Sin datos por tipo de gasto en las últimas {{ semanas_a_mostrar }} semanas para la sucursal seleccionada.</div>
-  {% endif %}
+      {% if grupos_general %}
+        {% for grupo in grupos_general %}
+        <details class="grupo" open>
+          <summary>
+            <span>{{ grupo.etiqueta }} <span style="font-weight:400; opacity:0.85;">({{ grupo.filas|length }})</span></span>
+            <span class="num">${{ grupo.presupuesto|floatformat:2 }}</span>
+            <span class="num">${{ grupo.gasto_real|floatformat:2 }}</span>
+            <span class="num">${{ grupo.restante|floatformat:2 }}</span>
+          </summary>
+          <table>
+            <thead>
+              <tr>
+                <th>Sucursal</th><th>Semana</th>
+                <th class="num">Presupuesto</th><th class="num">Gasto real</th><th class="num">Restante</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for fila in grupo.filas %}
+              <tr>
+                <td>{{ fila.sucursal.nombre }}</td>
+                <td>{{ fila.semana|date:"d/m/Y" }}</td>
+                <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
+                <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
+                <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2 }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </details>
+        {% endfor %}
+      {% else %}
+      <div class="vacio">Sin datos de presupuesto ni gasto real para el filtro actual.</div>
+      {% endif %}
+    </div>
+
+    <div class="reporte">
+      <div class="reporte-header">
+        <h2>Por tipo de gasto</h2>
+        <div class="agrupar-por">
+          <label>Agrupar por</label>
+          <select class="filtro-select" name="t_agrupar" onchange="this.form.submit()">
+            {% for valor, etiqueta in opciones_agrupar_tipo %}
+            <option value="{{ valor }}" {% if valor == agrupar_tipo %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      {% if grupos_tipo %}
+        {% for grupo in grupos_tipo %}
+        <details class="grupo">
+          <summary>
+            <span>{{ grupo.etiqueta }} <span style="font-weight:400; opacity:0.85;">({{ grupo.filas|length }})</span></span>
+            <span class="num">${{ grupo.presupuesto|floatformat:2 }}</span>
+            <span class="num">${{ grupo.gasto_real|floatformat:2 }}</span>
+            <span class="num">${{ grupo.restante|floatformat:2 }}</span>
+          </summary>
+          <table>
+            <thead>
+              <tr>
+                <th>Sucursal</th><th>Semana</th><th>Tipo de gasto</th>
+                <th class="num">Presupuesto</th><th class="num">Gasto real</th><th class="num">Restante</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for fila in grupo.filas %}
+              <tr>
+                <td>{{ fila.sucursal.nombre }}</td>
+                <td>{{ fila.semana|date:"d/m/Y" }}</td>
+                <td>{{ fila.tipo_gasto_nombre }}</td>
+                <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
+                <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
+                <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2 }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </details>
+        {% endfor %}
+      {% else %}
+      <div class="vacio">Sin datos por tipo de gasto para el filtro actual.</div>
+      {% endif %}
+    </div>
+  </form>
 </main>
+
+<script>
+function filtrarLista(input) {
+  const texto = input.value.toLowerCase();
+  const labels = input.closest('.filtro-panel').querySelectorAll('.filtro-lista label');
+  labels.forEach(l => {
+    l.classList.toggle('oculto', !l.dataset.texto.includes(texto));
+  });
+}
+
+function marcarTodas(boton, marcar) {
+  const panel = boton.closest('.filtro-panel');
+  const boxes = panel.querySelectorAll('input[name="sucursal"]');
+  boxes.forEach(b => { b.checked = marcar; });
+  document.getElementById('form-filtros').submit();
+}
+
+function quitarSucursal(event, id) {
+  event.preventDefault();
+  const cb = document.querySelector('input[name="sucursal"][value="' + id + '"]');
+  if (cb) { cb.checked = false; }
+  document.getElementById('form-filtros').submit();
+  return false;
+}
+</script>
 </body>
 </html>

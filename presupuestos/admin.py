@@ -19,8 +19,20 @@ admin.site.index_title = "Administracion"
 @admin.register(Sucursal)
 class SucursalAdmin(admin.ModelAdmin):
     list_display = ["nombre", "odoo_company_id", "activa"]
+    list_editable = ["activa"]
     list_filter = ["activa"]
     search_fields = ["nombre"]
+    actions = ["marcar_activa", "marcar_inactiva"]
+
+    @admin.action(description="Marcar como activa")
+    def marcar_activa(self, request, queryset):
+        actualizadas = queryset.update(activa=True)
+        self.message_user(request, f"{actualizadas} sucursal(es) marcada(s) como activa.")
+
+    @admin.action(description="Marcar como inactiva")
+    def marcar_inactiva(self, request, queryset):
+        actualizadas = queryset.update(activa=False)
+        self.message_user(request, f"{actualizadas} sucursal(es) marcada(s) como inactiva.")
 
 
 @admin.register(Categoria)
