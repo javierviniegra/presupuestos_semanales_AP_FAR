@@ -27,6 +27,7 @@ urlpatterns = [
     path("dashboard/reporte.pdf", views.reporte_pdf, name="reporte_pdf"),
     path("dashboard/detalle/<int:sucursal_id>/<str:semana>/", views.detalle_semana, name="detalle_semana"),
     path("dashboard/proveedores/", views.reporte_proveedores, name="reporte_proveedores"),
+    path("dashboard/pendientes/", views.facturas_pendientes, name="facturas_pendientes"),
     path("accounts/login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(next_page="home"), name="logout"),
     path("admin/", admin.site.urls),

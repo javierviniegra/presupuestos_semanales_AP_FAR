@@ -16,6 +16,8 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from xhtml2pdf import pisa
 
+from core.database.odoo import get_odoo_connection
+
 from .models import GastoReal, Presupuesto, Sucursal, TipoGasto
 
 LOGO_PATH = Path(settings.BASE_DIR) / "presupuestos" / "static" / "presupuestos" / "img" / "logo.png"
@@ -466,6 +468,102 @@ def reporte_proveedores(request):
         "top_proveedores": top_proveedores,
     }
     return render(request, "presupuestos/reporte_proveedores.html", context)
+
+
+@login_required
+def facturas_pendientes(request):
+    """
+    Live Odoo query (not from the daily-synced GastoReal, which only
+    covers paid/in_payment bills) - not_paid and partial vendor bills as of
+    a cutoff date, grouped by purchase order (invoice_origin) where present.
+    amount_residual is Odoo's own outstanding-balance field, computed per
+    invoice - unlike account.payment.amount (see GastoReal's docstring),
+    it's NOT affected by one payment covering multiple invoices, so it's
+    the reliable field for "how much is still owed" here.
+    """
+    sucursales_disponibles, restringido_a_una = _sucursales_para_usuario(request.user)
+
+    if restringido_a_una:
+        sucursales_seleccionadas = list(sucursales_disponibles)
+    elif "filtro_aplicado" in request.GET:
+        seleccion = request.GET.getlist("sucursal")
+        sucursales_seleccionadas = list(sucursales_disponibles.filter(pk__in=seleccion))
+    else:
+        sucursales_seleccionadas = list(sucursales_disponibles)
+
+    hasta_str = request.GET.get("hasta") or date.today().isoformat()
+    try:
+        hasta = date.fromisoformat(hasta_str)
+    except ValueError:
+        hasta = date.today()
+        hasta_str = hasta.isoformat()
+
+    sucursal_by_company = {s.odoo_company_id: s for s in sucursales_seleccionadas}
+    company_ids = list(sucursal_by_company.keys())
+
+    estados_pago = dict(GastoReal.PAYMENT_STATE_CHOICES)
+    facturas = []
+    if company_ids:
+        uid, models, db, password = get_odoo_connection()
+        bills = models.execute_kw(
+            db, uid, password, "account.move", "search_read",
+            [[
+                ["move_type", "=", "in_invoice"],
+                ["state", "=", "posted"],
+                ["payment_state", "in", ["not_paid", "partial"]],
+                ["company_id", "in", company_ids],
+                ["invoice_date", "<=", hasta_str],
+            ]],
+            {
+                "fields": [
+                    "id", "name", "invoice_origin", "partner_id", "company_id",
+                    "invoice_date", "invoice_date_due", "amount_total", "amount_residual", "payment_state",
+                ],
+                "limit": 5000,
+            },
+        )
+        for b in bills:
+            suc = sucursal_by_company.get(b["company_id"][0]) if b["company_id"] else None
+            if not suc:
+                continue
+            facturas.append(
+                {
+                    "sucursal": suc,
+                    "orden_compra": b["invoice_origin"] or None,
+                    "factura_numero": b["name"],
+                    "proveedor_nombre": b["partner_id"][1] if b["partner_id"] else "",
+                    "fecha_factura": date.fromisoformat(b["invoice_date"]) if b["invoice_date"] else None,
+                    "fecha_vencimiento": date.fromisoformat(b["invoice_date_due"]) if b["invoice_date_due"] else None,
+                    "monto_total": b["amount_total"],
+                    "monto_pendiente": b["amount_residual"],
+                    "estado_display": estados_pago.get(b["payment_state"], b["payment_state"]),
+                }
+            )
+
+    grupos_dict = {}
+    orden_claves = []
+    for f in facturas:
+        clave = f["orden_compra"] or "(Sin orden de compra)"
+        if clave not in grupos_dict:
+            grupos_dict[clave] = {"etiqueta": clave, "facturas": [], "pendiente": 0}
+            orden_claves.append(clave)
+        grupos_dict[clave]["facturas"].append(f)
+        grupos_dict[clave]["pendiente"] += f["monto_pendiente"]
+
+    orden_claves.sort(key=lambda k: grupos_dict[k]["pendiente"], reverse=True)
+    grupos = [grupos_dict[k] for k in orden_claves]
+
+    context = {
+        "sucursales_disponibles": sucursales_disponibles,
+        "sucursales_seleccionadas": sucursales_seleccionadas,
+        "sucursales_seleccionadas_ids": {s.id for s in sucursales_seleccionadas},
+        "restringido_a_una": restringido_a_una,
+        "hasta": hasta,
+        "grupos": grupos,
+        "total_pendiente": sum(f["monto_pendiente"] for f in facturas),
+        "total_facturas": len(facturas),
+    }
+    return render(request, "presupuestos/facturas_pendientes.html", context)
 
 
 @login_required

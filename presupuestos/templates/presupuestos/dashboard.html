@@ -271,6 +271,7 @@
 
       <button type="submit" formaction="{% url 'reporte_pdf' %}" formtarget="_blank" class="btn-pdf">Exportar PDF</button>
       <button type="submit" formaction="{% url 'reporte_proveedores' %}" class="btn-pdf">Reporte por proveedor</button>
+      <button type="submit" formaction="{% url 'facturas_pendientes' %}" class="btn-pdf">Facturas pendientes</button>
 
       {% if not restringido_a_una %}
       <div class="chips">
