@@ -76,12 +76,14 @@ def dashboard(request):
 
     if restringido_a_una:
         sucursales_seleccionadas = list(sucursales_disponibles)
-    else:
+    elif "filtro_aplicado" in request.GET:
+        # The filter form was submitted (even if every checkbox ended up
+        # unchecked) - respect exactly what was selected, empty or not.
         seleccion = request.GET.getlist("sucursal")
-        if seleccion:
-            sucursales_seleccionadas = list(sucursales_disponibles.filter(pk__in=seleccion))
-        else:
-            sucursales_seleccionadas = list(sucursales_disponibles)
+        sucursales_seleccionadas = list(sucursales_disponibles.filter(pk__in=seleccion))
+    else:
+        # First load, no filter interaction yet - default to everything.
+        sucursales_seleccionadas = list(sucursales_disponibles)
 
     try:
         num_semanas = int(request.GET.get("semanas", SEMANAS_POR_DEFECTO))
