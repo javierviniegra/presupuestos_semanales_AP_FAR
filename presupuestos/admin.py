@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.humanize.templatetags.humanize import intcomma
 
 from .models import (
     Categoria,
@@ -64,8 +65,12 @@ class CategoriaProductoTipoGastoAdmin(admin.ModelAdmin):
 
 @admin.register(Presupuesto)
 class PresupuestoAdmin(admin.ModelAdmin):
-    list_display = ["sucursal", "tipo_gasto", "semana", "monto", "creado_por"]
+    list_display = ["sucursal", "tipo_gasto", "semana", "monto_formateado", "creado_por"]
     list_filter = ["sucursal", "tipo_gasto", "semana"]
+
+    @admin.display(description="Monto", ordering="monto")
+    def monto_formateado(self, obj):
+        return f"${intcomma(obj.monto)}"
 
 
 @admin.register(GastoReal)
@@ -77,11 +82,15 @@ class GastoRealAdmin(admin.ModelAdmin):
         "tipo_gasto",
         "fecha_factura",
         "semana",
-        "monto",
+        "monto_formateado",
         "payment_state",
     ]
     list_filter = ["sucursal", "tipo_gasto", "payment_state", "semana"]
     search_fields = ["factura_numero", "proveedor_nombre"]
+
+    @admin.display(description="Monto", ordering="monto")
+    def monto_formateado(self, obj):
+        return f"${intcomma(obj.monto)}"
 
 
 @admin.register(PerfilUsuario)

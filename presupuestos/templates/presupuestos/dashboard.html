@@ -1,4 +1,4 @@
-{% load static %}
+{% load static humanize %}
 <!doctype html>
 <html lang="es">
 <head>
@@ -318,9 +318,9 @@
         <details class="grupo" open>
           <summary>
             <span>{{ grupo.etiqueta }} <span style="font-weight:400; opacity:0.85;">({{ grupo.filas|length }})</span></span>
-            <span class="num">${{ grupo.presupuesto|floatformat:2 }}</span>
-            <span class="num">${{ grupo.gasto_real|floatformat:2 }}</span>
-            <span class="num">${{ grupo.restante|floatformat:2 }}</span>
+            <span class="num">${{ grupo.presupuesto|floatformat:2|intcomma }}</span>
+            <span class="num">${{ grupo.gasto_real|floatformat:2|intcomma }}</span>
+            <span class="num">${{ grupo.restante|floatformat:2|intcomma }}</span>
           </summary>
           <table>
             <thead>
@@ -334,9 +334,9 @@
               <tr>
                 <td>{{ fila.sucursal.nombre }}</td>
                 <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
-                <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
-                <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
-                <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2 }}</td>
+                <td class="num">${{ fila.presupuesto|floatformat:2|intcomma }}</td>
+                <td class="num">${{ fila.gasto_real|floatformat:2|intcomma }}</td>
+                <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2|intcomma }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -366,9 +366,9 @@
         <details class="grupo">
           <summary>
             <span>{{ grupo.etiqueta }} <span style="font-weight:400; opacity:0.85;">({{ grupo.filas|length }})</span></span>
-            <span class="num">${{ grupo.presupuesto|floatformat:2 }}</span>
-            <span class="num">${{ grupo.gasto_real|floatformat:2 }}</span>
-            <span class="num">${{ grupo.restante|floatformat:2 }}</span>
+            <span class="num">${{ grupo.presupuesto|floatformat:2|intcomma }}</span>
+            <span class="num">${{ grupo.gasto_real|floatformat:2|intcomma }}</span>
+            <span class="num">${{ grupo.restante|floatformat:2|intcomma }}</span>
           </summary>
           <table>
             <thead>
@@ -383,9 +383,9 @@
                 <td>{{ fila.sucursal.nombre }}</td>
                 <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
                 <td>{{ fila.tipo_gasto_nombre }}</td>
-                <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
-                <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
-                <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2 }}</td>
+                <td class="num">${{ fila.presupuesto|floatformat:2|intcomma }}</td>
+                <td class="num">${{ fila.gasto_real|floatformat:2|intcomma }}</td>
+                <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2|intcomma }}</td>
               </tr>
               {% endfor %}
             </tbody>
