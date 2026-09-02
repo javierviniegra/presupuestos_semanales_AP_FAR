@@ -203,6 +203,8 @@
   }
   td { padding: 8px 16px; font-size: 14px; border-top: 1px solid #eee; }
   tr:nth-child(even) td { background: #fafaf7; }
+  tr.fila-clicable { cursor: pointer; }
+  tr.fila-clicable:hover td { background: var(--crema) !important; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.restante-neg { color: var(--rojo); font-weight: 600; }
   td.restante-pos { color: var(--verde-oscuro); font-weight: 600; }
@@ -331,7 +333,7 @@
             </thead>
             <tbody>
               {% for fila in grupo.filas %}
-              <tr>
+              <tr class="fila-clicable" onclick="window.location='{% url 'detalle_semana' fila.sucursal.id fila.semana|date:"Y-m-d" %}'">
                 <td>{{ fila.sucursal.nombre }}</td>
                 <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
                 <td class="num">${{ fila.presupuesto|floatformat:2|intcomma }}</td>

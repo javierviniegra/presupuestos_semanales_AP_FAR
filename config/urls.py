@@ -25,6 +25,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/reporte.pdf", views.reporte_pdf, name="reporte_pdf"),
+    path("dashboard/detalle/<int:sucursal_id>/<str:semana>/", views.detalle_semana, name="detalle_semana"),
     path("accounts/login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(next_page="home"), name="logout"),
     path("admin/", admin.site.urls),

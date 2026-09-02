@@ -1,0 +1,197 @@
+{% load static humanize %}
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detalle semanal - {{ sucursal.nombre }}</title>
+<style>
+  :root {
+    --verde: #035953;
+    --verde-oscuro: #023f3b;
+    --naranja: #eb6834;
+    --muted: #898781;
+    --crema: #f0e9d8;
+    --texto: #2d2d2d;
+    --rojo: #ba2121;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--texto);
+    background: #f6f4ef;
+  }
+  header {
+    background: var(--verde-oscuro);
+    color: #fff;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 18px; }
+  header img { height: 32px; }
+  header a { color: #cfe3e0; font-size: 13px; text-decoration: none; }
+  header a:hover { text-decoration: underline; }
+
+  main { padding: 24px 32px 48px; max-width: 1100px; margin: 0 auto; }
+
+  .titulo-semana h1 { color: var(--verde-oscuro); font-size: 22px; margin: 0 0 4px; }
+  .titulo-semana p { color: #666; margin: 0 0 24px; font-size: 14px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+  .kpi { background: #fff; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .kpi-valor { font-size: 22px; font-weight: 700; }
+  .kpi-etiqueta { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.03em; margin-top: 4px; }
+  .kpi-neutro { color: var(--texto); }
+  .kpi-verde { color: var(--verde-oscuro); }
+  .kpi-rojo { color: var(--rojo); }
+
+  .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 24px; }
+  .card h2 { color: var(--verde-oscuro); font-size: 16px; margin: 0 0 16px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f2f2ee; color: #555; text-align: left; padding: 8px 12px; font-size: 12px; text-transform: uppercase; }
+  td { padding: 8px 12px; font-size: 14px; border-top: 1px solid #eee; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:nth-child(even) td { background: #fafaf7; }
+  .restante-neg { color: var(--rojo); font-weight: 600; }
+  .restante-pos { color: var(--verde-oscuro); font-weight: 600; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img src="{% static 'presupuestos/img/logo.png' %}" alt="Fonda Argentina">
+    Presupuestos AP - Sucursales
+  </div>
+  <div>
+    <a href="{% url 'dashboard' %}">&larr; Volver al dashboard</a>
+  </div>
+</header>
+
+<main>
+  <div class="titulo-semana">
+    <h1>{{ sucursal.nombre }}</h1>
+    <p>Semana {{ semana|date:"W" }} ({{ semana|date:"d/m/Y" }})</p>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-valor kpi-neutro">${{ total_presupuesto|floatformat:2|intcomma }}</div>
+      <div class="kpi-etiqueta">Presupuesto</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-valor kpi-neutro">${{ total_gasto_real|floatformat:2|intcomma }}</div>
+      <div class="kpi-etiqueta">Gasto real</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-valor {% if total_restante < 0 %}kpi-rojo{% else %}kpi-verde{% endif %}">${{ total_restante|floatformat:2|intcomma }}</div>
+      <div class="kpi-etiqueta">Restante</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Presupuesto vs. gasto real por tipo de gasto</h2>
+    <canvas id="grafica-tipo" height="110"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Principales proveedores de la semana</h2>
+    {% if por_proveedor %}
+    <canvas id="grafica-proveedor" height="110"></canvas>
+    {% else %}
+    <p>Sin facturas pagadas esta semana.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Facturas de la semana</h2>
+    {% if facturas %}
+    <table>
+      <thead>
+        <tr>
+          <th>Factura</th><th>Proveedor</th><th>Tipo de gasto</th><th>Fecha</th>
+          <th class="num">Monto</th><th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in facturas %}
+        <tr>
+          <td>{{ f.factura_numero }}</td>
+          <td>{{ f.proveedor_nombre }}</td>
+          <td>{{ f.tipo_gasto.nombre|default:"Sin clasificar" }}</td>
+          <td>{{ f.fecha_factura|date:"d/m/Y" }}</td>
+          <td class="num">${{ f.monto|floatformat:2|intcomma }}</td>
+          <td>{{ f.get_payment_state_display }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Sin facturas pagadas esta semana.</p>
+    {% endif %}
+  </div>
+</main>
+
+{{ por_tipo|json_script:"tipo-data" }}
+{{ por_proveedor|json_script:"proveedor-data" }}
+
+<script>
+const datosTipo = JSON.parse(document.getElementById('tipo-data').textContent);
+new Chart(document.getElementById('grafica-tipo'), {
+  type: 'bar',
+  data: {
+    labels: datosTipo.map(d => d.tipo_gasto_nombre),
+    datasets: [
+      { label: 'Presupuesto', data: datosTipo.map(d => d.presupuesto), backgroundColor: '#eb6834' },
+      { label: 'Gasto real', data: datosTipo.map(d => d.gasto_real), backgroundColor: '#035953' },
+    ],
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom' },
+      tooltip: {
+        callbacks: {
+          label: (item) => item.dataset.label + ': $' + item.parsed.x.toLocaleString('es-MX', { minimumFractionDigits: 2 }),
+        },
+      },
+    },
+    scales: {
+      x: { ticks: { callback: (v) => '$' + v.toLocaleString('es-MX') } },
+    },
+  },
+});
+
+const datosProveedor = JSON.parse(document.getElementById('proveedor-data').textContent);
+if (datosProveedor.length) {
+  new Chart(document.getElementById('grafica-proveedor'), {
+    type: 'bar',
+    data: {
+      labels: datosProveedor.map(d => d.proveedor_nombre),
+      datasets: [{ label: 'Gasto real', data: datosProveedor.map(d => d.total), backgroundColor: '#035953' }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => '$' + item.parsed.x.toLocaleString('es-MX', { minimumFractionDigits: 2 }),
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { callback: (v) => '$' + v.toLocaleString('es-MX') } },
+      },
+    },
+  });
+}
+</script>
+</body>
+</html>

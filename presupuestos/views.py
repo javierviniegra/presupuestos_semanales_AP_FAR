@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
-from django.http import HttpResponse
-from django.shortcuts import render
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.utils import timezone
 from xhtml2pdf import pisa
@@ -283,6 +283,84 @@ def _calcular_contexto_dashboard(request):
 def dashboard(request):
     context = _calcular_contexto_dashboard(request)
     return render(request, "presupuestos/dashboard.html", context)
+
+
+@login_required
+def detalle_semana(request, sucursal_id, semana):
+    sucursales_permitidas, _ = _sucursales_para_usuario(request.user)
+    suc = get_object_or_404(sucursales_permitidas, pk=sucursal_id)
+
+    try:
+        semana_fecha = date.fromisoformat(semana)
+    except ValueError:
+        raise Http404("Semana invalida")
+
+    presupuestos = Presupuesto.objects.filter(sucursal=suc, semana=semana_fecha)
+    gastos = GastoReal.objects.filter(sucursal=suc, semana=semana_fecha)
+
+    tipos_gasto_objs = list(TipoGasto.objects.all())
+    tipos_gasto = {t.id: t.nombre for t in tipos_gasto_objs}
+    todos_los_tipo_ids = [t.id for t in tipos_gasto_objs]
+
+    gasto_por_tipo = {
+        r["tipo_gasto_id"]: r["total"] for r in gastos.values("tipo_gasto_id").annotate(total=Sum("monto"))
+    }
+
+    especificados = {}
+    remanente = None
+    for r in presupuestos.values("tipo_gasto_id").annotate(total=Sum("monto")):
+        if r["tipo_gasto_id"] is None:
+            remanente = r["total"]
+        else:
+            especificados[r["tipo_gasto_id"]] = r["total"]
+
+    pres_resuelto = dict(especificados)
+    if remanente:
+        no_especificados = [tid for tid in todos_los_tipo_ids if tid not in especificados]
+        if None in gasto_por_tipo:
+            no_especificados.append(None)
+        if no_especificados:
+            parte = round(remanente / len(no_especificados), 2)
+            for tid in no_especificados:
+                pres_resuelto[tid] = pres_resuelto.get(tid, 0) + parte
+
+    claves_tipo = set(pres_resuelto) | set(gasto_por_tipo)
+    por_tipo = []
+    for tid in claves_tipo:
+        presupuesto = pres_resuelto.get(tid) or 0
+        gasto = gasto_por_tipo.get(tid) or 0
+        por_tipo.append(
+            {
+                "tipo_gasto_nombre": tipos_gasto.get(tid, "Sin categoria (sin clasificar)"),
+                "presupuesto": presupuesto,
+                "gasto_real": gasto,
+                "restante": presupuesto - gasto,
+            }
+        )
+    por_tipo.sort(key=lambda f: f["gasto_real"], reverse=True)
+
+    por_proveedor = list(
+        gastos.values("proveedor_nombre").annotate(total=Sum("monto")).order_by("-total")[:10]
+    )
+
+    facturas = list(
+        gastos.select_related("tipo_gasto").order_by("-monto")[:200]
+    )
+
+    total_presupuesto = sum(f["presupuesto"] for f in por_tipo)
+    total_gasto_real = sum(f["gasto_real"] for f in por_tipo)
+
+    context = {
+        "sucursal": suc,
+        "semana": semana_fecha,
+        "por_tipo": por_tipo,
+        "por_proveedor": por_proveedor,
+        "facturas": facturas,
+        "total_presupuesto": total_presupuesto,
+        "total_gasto_real": total_gasto_real,
+        "total_restante": total_presupuesto - total_gasto_real,
+    }
+    return render(request, "presupuestos/detalle_semana.html", context)
 
 
 @login_required
