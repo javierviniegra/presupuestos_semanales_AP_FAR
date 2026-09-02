@@ -108,7 +108,34 @@
   </div>
 
   <div class="card">
-    <h2>Facturas de la semana</h2>
+    <h2>Facturas de la semana (total por factura)</h2>
+    {% if facturas_resumen %}
+    <table>
+      <thead>
+        <tr>
+          <th>Factura</th><th>Proveedor</th><th>Fecha</th>
+          <th class="num">Monto total</th><th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in facturas_resumen %}
+        <tr>
+          <td>{{ f.factura_numero }}</td>
+          <td>{{ f.proveedor_nombre }}</td>
+          <td>{{ f.fecha_factura|date:"d/m/Y" }}</td>
+          <td class="num">${{ f.total|floatformat:2|intcomma }}</td>
+          <td>{{ f.estado_display }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Sin facturas pagadas esta semana.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Facturas de la semana (por linea y tipo de gasto)</h2>
     {% if facturas %}
     <table>
       <thead>

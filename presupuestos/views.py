@@ -343,6 +343,14 @@ def detalle_semana(request, sucursal_id, semana):
         gastos.values("proveedor_nombre").annotate(total=Sum("monto")).order_by("-total")[:10]
     )
 
+    estados_pago = dict(GastoReal.PAYMENT_STATE_CHOICES)
+    facturas_resumen = [
+        {**f, "estado_display": estados_pago.get(f["payment_state"], f["payment_state"])}
+        for f in gastos.values("factura_numero", "proveedor_nombre", "fecha_factura", "payment_state")
+        .annotate(total=Sum("monto"))
+        .order_by("-total")
+    ]
+
     facturas = list(
         gastos.select_related("tipo_gasto").order_by("-monto")[:200]
     )
@@ -356,6 +364,7 @@ def detalle_semana(request, sucursal_id, semana):
         "por_tipo": por_tipo,
         "por_proveedor": por_proveedor,
         "facturas": facturas,
+        "facturas_resumen": facturas_resumen,
         "total_presupuesto": total_presupuesto,
         "total_gasto_real": total_gasto_real,
         "total_restante": total_presupuesto - total_gasto_real,
