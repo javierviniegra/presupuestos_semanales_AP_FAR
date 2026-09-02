@@ -12,9 +12,11 @@
 # without a separate cancellation-handling path.
 
 import datetime
+import logging
 import os
 import sys
 from decimal import Decimal
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -24,6 +26,23 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 from django.utils import timezone  # noqa: E402
+
+# Own log file, separate from Django's own logs/django.log, since this runs
+# unattended (~5am) and needs a dedicated, easy-to-check history of runs.
+LOGS_DIR = Path(__file__).resolve().parent.parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
+
+logger = logging.getLogger("scheduler")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    _file_handler = logging.FileHandler(LOGS_DIR / "scheduler.log", encoding="utf-8")
+    _file_handler.setFormatter(_formatter)
+    _console_handler = logging.StreamHandler()
+    _console_handler.setFormatter(_formatter)
+    logger.addHandler(_file_handler)
+    logger.addHandler(_console_handler)
+    logger.propagate = False
 
 from presupuestos.models import (  # noqa: E402
     CategoriaProductoTipoGasto,
@@ -54,6 +73,7 @@ def resolve_tipo_gasto(account, product_id, prod_categ, account_map, category_ma
 
 
 def run():
+    logger.info("scheduler run started")
     sync_started_at = timezone.now()
 
     uid, models, db, password = get_odoo_connection()
@@ -131,12 +151,17 @@ def run():
     deleted_count = stale.count()
     stale.delete()
 
-    print(
-        f"bills={len(bills)} lines={len(all_lines)} created={created} updated={updated} "
-        f"deleted_stale={deleted_count} skipped_no_sucursal={skipped_no_sucursal} "
-        f"skipped_no_date={skipped_no_date}"
+    logger.info(
+        "bills=%s lines=%s created=%s updated=%s deleted_stale=%s "
+        "skipped_no_sucursal=%s skipped_no_date=%s",
+        len(bills), len(all_lines), created, updated, deleted_count,
+        skipped_no_sucursal, skipped_no_date,
     )
 
 
 if __name__ == "__main__":
-    run()
+    try:
+        run()
+    except Exception:
+        logger.exception("scheduler run failed")
+        raise
