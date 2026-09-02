@@ -1,10 +1,19 @@
+import io
 from datetime import date, timedelta
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
+from django.http import HttpResponse
 from django.shortcuts import render
+from django.template.loader import render_to_string
+from django.utils import timezone
+from xhtml2pdf import pisa
 
 from .models import GastoReal, Presupuesto, Sucursal, TipoGasto
+
+LOGO_PATH = Path(settings.BASE_DIR) / "presupuestos" / "static" / "presupuestos" / "img" / "logo.png"
 
 SEMANAS_POR_DEFECTO = 12
 OPCIONES_SEMANAS = [4, 8, 12, 26, 52]
@@ -86,8 +95,7 @@ def _tendencia_lineal(valores):
     return [round(pendiente * i + intercepto, 2) for i in range(n)]
 
 
-@login_required
-def dashboard(request):
+def _calcular_contexto_dashboard(request):
     sucursales_disponibles, restringido_a_una = _sucursales_para_usuario(request.user)
 
     if restringido_a_una:
@@ -193,8 +201,9 @@ def dashboard(request):
     if agrupar_tipo not in dict(OPCIONES_AGRUPAR_TIPO):
         agrupar_tipo = "tipo_gasto"
 
-    context = {
+    return {
         "sucursales_disponibles": sucursales_disponibles,
+        "sucursales_seleccionadas": sucursales_seleccionadas,
         "sucursales_seleccionadas_ids": {s.id for s in sucursales_seleccionadas},
         "restringido_a_una": restringido_a_una,
         "num_semanas": num_semanas,
@@ -207,4 +216,26 @@ def dashboard(request):
         "opciones_agrupar_tipo": OPCIONES_AGRUPAR_TIPO,
         "graficas": graficas,
     }
+
+
+@login_required
+def dashboard(request):
+    context = _calcular_contexto_dashboard(request)
     return render(request, "presupuestos/dashboard.html", context)
+
+
+@login_required
+def reporte_pdf(request):
+    context = _calcular_contexto_dashboard(request)
+    context["generado_en"] = timezone.now()
+    context["generado_por"] = request.user.get_username()
+    context["logo_path"] = str(LOGO_PATH)
+
+    html = render_to_string("presupuestos/reporte_pdf.html", context)
+    buffer = io.BytesIO()
+    pisa.CreatePDF(src=html, dest=buffer, encoding="utf-8")
+
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    nombre_archivo = f"reporte_presupuesto_{context['generado_en'].strftime('%Y%m%d_%H%M')}.pdf"
+    response["Content-Disposition"] = f'inline; filename="{nombre_archivo}"'
+    return response

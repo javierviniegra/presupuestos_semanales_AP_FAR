@@ -144,6 +144,18 @@
     background: #fafafa;
   }
 
+  .btn-pdf {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--verde);
+    cursor: pointer;
+  }
+  .btn-pdf:hover { background: var(--verde-oscuro); }
+
   .reporte { margin-top: 32px; }
   .reporte-header {
     display: flex;
@@ -254,6 +266,8 @@
         <option value="{{ n }}" {% if n == num_semanas %}selected{% endif %}>Ultimas {{ n }} semanas</option>
         {% endfor %}
       </select>
+
+      <button type="submit" formaction="{% url 'reporte_pdf' %}" formtarget="_blank" class="btn-pdf">Exportar PDF</button>
 
       {% if not restringido_a_una %}
       <div class="chips">
