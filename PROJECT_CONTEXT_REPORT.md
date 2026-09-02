@@ -86,6 +86,12 @@ identified. **What reliably works**: kill by process path, not port -
 - then start fresh. Do this after every template/view/model edit before
 re-testing, don't trust a "still running" server to have picked up changes.
 
+### Dev server port: 8010, not the Django default 8000
+
+Standing rule set 2026-09-02: always start with
+`python manage.py runserver 8010`, check `http://127.0.0.1:8010/`, not
+8000.
+
 ### Browser-tool-specific quirks (not real app bugs)
 
 - The sandboxed preview browser blocks `<script src="external">` network

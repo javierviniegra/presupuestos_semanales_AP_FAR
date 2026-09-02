@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -37,6 +37,86 @@ def home(request):
 
 def _lunes_de_semana(d):
     return d - timedelta(days=d.weekday())
+
+
+def _semanas_periodo(num_semanas):
+    hoy = date.today()
+    semana_actual = _lunes_de_semana(hoy)
+    return [semana_actual - timedelta(weeks=i) for i in range(num_semanas)]
+
+
+def _obtener_facturas_pendientes(sucursales_seleccionadas, hasta):
+    """
+    Live Odoo query (not from the daily-synced GastoReal, which only covers
+    paid/in_payment bills) - not_paid and partial vendor bills as of a
+    cutoff date, grouped by purchase order (invoice_origin) where present.
+    amount_residual is Odoo's own outstanding-balance field, computed per
+    invoice - unlike account.payment.amount (see GastoReal's docstring),
+    it's NOT affected by one payment covering multiple invoices, so it's
+    the reliable field for "how much is still owed" here. Shared by the
+    live /dashboard/pendientes/ page and the executive PDF's own section.
+    """
+    hasta_str = hasta.isoformat()
+    sucursal_by_company = {s.odoo_company_id: s for s in sucursales_seleccionadas}
+    company_ids = list(sucursal_by_company.keys())
+
+    estados_pago = dict(GastoReal.PAYMENT_STATE_CHOICES)
+    facturas = []
+    if company_ids:
+        uid, models, db, password = get_odoo_connection()
+        bills = models.execute_kw(
+            db, uid, password, "account.move", "search_read",
+            [[
+                ["move_type", "=", "in_invoice"],
+                ["state", "=", "posted"],
+                ["payment_state", "in", ["not_paid", "partial"]],
+                ["company_id", "in", company_ids],
+                ["invoice_date", "<=", hasta_str],
+            ]],
+            {
+                "fields": [
+                    "id", "name", "invoice_origin", "partner_id", "company_id",
+                    "invoice_date", "invoice_date_due", "amount_total", "amount_residual", "payment_state",
+                ],
+                "limit": 5000,
+            },
+        )
+        for b in bills:
+            suc = sucursal_by_company.get(b["company_id"][0]) if b["company_id"] else None
+            if not suc:
+                continue
+            facturas.append(
+                {
+                    "sucursal": suc,
+                    "orden_compra": b["invoice_origin"] or None,
+                    "factura_numero": b["name"],
+                    "proveedor_nombre": b["partner_id"][1] if b["partner_id"] else "",
+                    "fecha_factura": date.fromisoformat(b["invoice_date"]) if b["invoice_date"] else None,
+                    "fecha_vencimiento": date.fromisoformat(b["invoice_date_due"]) if b["invoice_date_due"] else None,
+                    "monto_total": b["amount_total"],
+                    "monto_pendiente": b["amount_residual"],
+                    "estado_display": estados_pago.get(b["payment_state"], b["payment_state"]),
+                }
+            )
+
+    grupos_dict = {}
+    orden_claves = []
+    for f in facturas:
+        clave = f["orden_compra"] or "(Sin orden de compra)"
+        if clave not in grupos_dict:
+            grupos_dict[clave] = {"etiqueta": clave, "facturas": [], "pendiente": 0}
+            orden_claves.append(clave)
+        grupos_dict[clave]["facturas"].append(f)
+        grupos_dict[clave]["pendiente"] += f["monto_pendiente"]
+
+    orden_claves.sort(key=lambda k: grupos_dict[k]["pendiente"], reverse=True)
+    grupos = [grupos_dict[k] for k in orden_claves]
+
+    return {
+        "grupos": grupos,
+        "total_pendiente": sum(f["monto_pendiente"] for f in facturas),
+        "total_facturas": len(facturas),
+    }
 
 
 def _sucursales_para_usuario(user):
@@ -160,6 +240,47 @@ def _grafica_png_base64(grafica):
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def _grafica_tipo_gasto_png_base64(sucursal_nombre, filas):
+    """
+    Horizontal grouped bar chart (presupuesto vs. gasto real per tipo_gasto),
+    one per sucursal, for the executive PDF's Anexo B - replaces a giant
+    sucursal x semana x tipo_gasto table with something readable. A radar
+    chart was considered and rejected: tipo_gasto categories span very
+    different budget scales (Alimentos ~$100k+ vs Publicidad ~$5-25k) which
+    a radial axis distorts, and it can't represent a negative restante the
+    way an over-budget bar comparison naturally does.
+    """
+    if not filas:
+        return None
+
+    etiquetas = [f["etiqueta"] for f in filas]
+    presupuesto = [float(f["presupuesto"]) for f in filas]
+    gasto_real = [float(f["gasto_real"]) for f in filas]
+
+    n = len(etiquetas)
+    fig, ax = plt.subplots(figsize=(7, 0.38 * n + 1), dpi=150)
+    y = list(range(n))
+    altura = 0.35
+    ax.barh([i + altura / 2 for i in y], presupuesto, height=altura, color="#eb6834", label="Presupuesto")
+    ax.barh([i - altura / 2 for i in y], gasto_real, height=altura, color="#035953", label="Gasto real")
+    ax.set_yticks(y)
+    ax.set_yticklabels(etiquetas, fontsize=7)
+    ax.invert_yaxis()
+    ax.tick_params(axis="x", labelsize=7)
+    ax.xaxis.set_major_formatter(lambda v, _: f"${v:,.0f}")
+    ax.set_title(sucursal_nombre, fontsize=9, color="#023f3b", fontweight="bold", loc="left")
+    ax.legend(fontsize=7, loc="lower right", frameon=False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="x", color="#e1e0d9", linewidth=0.5)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    plt.close(fig)
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
 def _calcular_contexto_dashboard(request):
     sucursales_disponibles, restringido_a_una = _sucursales_para_usuario(request.user)
 
@@ -180,9 +301,7 @@ def _calcular_contexto_dashboard(request):
         num_semanas = SEMANAS_POR_DEFECTO
     num_semanas = max(1, min(num_semanas, 52))
 
-    hoy = date.today()
-    semana_actual = _lunes_de_semana(hoy)
-    semanas = [semana_actual - timedelta(weeks=i) for i in range(num_semanas)]
+    semanas = _semanas_periodo(num_semanas)
 
     presupuestos = Presupuesto.objects.filter(sucursal__in=sucursales_seleccionadas, semana__in=semanas)
     gastos = GastoReal.objects.filter(sucursal__in=sucursales_seleccionadas, semana__in=semanas)
@@ -311,6 +430,8 @@ def _calcular_contexto_dashboard(request):
         "opciones_agrupar_tipo": OPCIONES_AGRUPAR_TIPO,
         "graficas": graficas,
         "filas_general": filas_general,
+        "filas_tipo": filas_tipo,
+        "semanas": semanas,
     }
 
 
@@ -431,9 +552,7 @@ def reporte_proveedores(request):
         num_semanas = SEMANAS_POR_DEFECTO
     num_semanas = max(1, min(num_semanas, 52))
 
-    hoy = date.today()
-    semana_actual = _lunes_de_semana(hoy)
-    semanas = [semana_actual - timedelta(weeks=i) for i in range(num_semanas)]
+    semanas = _semanas_periodo(num_semanas)
 
     gastos = GastoReal.objects.filter(sucursal__in=sucursales_seleccionadas, semana__in=semanas)
     sucursales_por_id = {s.id: s for s in sucursales_seleccionadas}
@@ -496,62 +615,8 @@ def facturas_pendientes(request):
         hasta = date.fromisoformat(hasta_str)
     except ValueError:
         hasta = date.today()
-        hasta_str = hasta.isoformat()
 
-    sucursal_by_company = {s.odoo_company_id: s for s in sucursales_seleccionadas}
-    company_ids = list(sucursal_by_company.keys())
-
-    estados_pago = dict(GastoReal.PAYMENT_STATE_CHOICES)
-    facturas = []
-    if company_ids:
-        uid, models, db, password = get_odoo_connection()
-        bills = models.execute_kw(
-            db, uid, password, "account.move", "search_read",
-            [[
-                ["move_type", "=", "in_invoice"],
-                ["state", "=", "posted"],
-                ["payment_state", "in", ["not_paid", "partial"]],
-                ["company_id", "in", company_ids],
-                ["invoice_date", "<=", hasta_str],
-            ]],
-            {
-                "fields": [
-                    "id", "name", "invoice_origin", "partner_id", "company_id",
-                    "invoice_date", "invoice_date_due", "amount_total", "amount_residual", "payment_state",
-                ],
-                "limit": 5000,
-            },
-        )
-        for b in bills:
-            suc = sucursal_by_company.get(b["company_id"][0]) if b["company_id"] else None
-            if not suc:
-                continue
-            facturas.append(
-                {
-                    "sucursal": suc,
-                    "orden_compra": b["invoice_origin"] or None,
-                    "factura_numero": b["name"],
-                    "proveedor_nombre": b["partner_id"][1] if b["partner_id"] else "",
-                    "fecha_factura": date.fromisoformat(b["invoice_date"]) if b["invoice_date"] else None,
-                    "fecha_vencimiento": date.fromisoformat(b["invoice_date_due"]) if b["invoice_date_due"] else None,
-                    "monto_total": b["amount_total"],
-                    "monto_pendiente": b["amount_residual"],
-                    "estado_display": estados_pago.get(b["payment_state"], b["payment_state"]),
-                }
-            )
-
-    grupos_dict = {}
-    orden_claves = []
-    for f in facturas:
-        clave = f["orden_compra"] or "(Sin orden de compra)"
-        if clave not in grupos_dict:
-            grupos_dict[clave] = {"etiqueta": clave, "facturas": [], "pendiente": 0}
-            orden_claves.append(clave)
-        grupos_dict[clave]["facturas"].append(f)
-        grupos_dict[clave]["pendiente"] += f["monto_pendiente"]
-
-    orden_claves.sort(key=lambda k: grupos_dict[k]["pendiente"], reverse=True)
-    grupos = [grupos_dict[k] for k in orden_claves]
+    pendientes = _obtener_facturas_pendientes(sucursales_seleccionadas, hasta)
 
     context = {
         "sucursales_disponibles": sucursales_disponibles,
@@ -559,9 +624,9 @@ def facturas_pendientes(request):
         "sucursales_seleccionadas_ids": {s.id for s in sucursales_seleccionadas},
         "restringido_a_una": restringido_a_una,
         "hasta": hasta,
-        "grupos": grupos,
-        "total_pendiente": sum(f["monto_pendiente"] for f in facturas),
-        "total_facturas": len(facturas),
+        "grupos": pendientes["grupos"],
+        "total_pendiente": pendientes["total_pendiente"],
+        "total_facturas": pendientes["total_facturas"],
     }
     return render(request, "presupuestos/facturas_pendientes.html", context)
 
@@ -591,6 +656,53 @@ def reporte_pdf(request):
     context["graficas_imagenes"] = [
         {"sucursal_nombre": g["sucursal_nombre"], "imagen": _grafica_png_base64(g)} for g in context["graficas"]
     ]
+
+    # Anexo A always groups by sucursal (rows by semana within it), regardless
+    # of the live dashboard's own "Agrupar por" toggle - a fixed shape for
+    # the executive report.
+    context["anexo_a_grupos"] = _agrupar(context["filas_general"], "sucursal")
+
+    # Anexo B - per-sucursal detail by tipo_gasto, collapsed across the whole
+    # period (not per-week - that granularity is what made this section a
+    # huge table before, one row per sucursal/semana/tipo_gasto instead of
+    # one per sucursal/tipo_gasto). Charted as a horizontal bar comparison
+    # plus the exact numbers in a table underneath.
+    detalle_por_sucursal = []
+    for suc in context["sucursales_seleccionadas"]:
+        filas_suc = [f for f in context["filas_tipo"] if f["sucursal"].id == suc.id]
+        grupos_tipo_suc = sorted(_agrupar(filas_suc, "tipo_gasto"), key=lambda g: g["gasto_real"], reverse=True)
+        detalle_por_sucursal.append(
+            {
+                "sucursal": suc,
+                "grupos": grupos_tipo_suc,
+                "grafica": _grafica_tipo_gasto_png_base64(suc.nombre, grupos_tipo_suc),
+                "total_presupuesto": sum(g["presupuesto"] for g in grupos_tipo_suc),
+                "total_gasto_real": sum(g["gasto_real"] for g in grupos_tipo_suc),
+                "total_restante": sum(g["restante"] for g in grupos_tipo_suc),
+            }
+        )
+    context["detalle_por_sucursal"] = detalle_por_sucursal
+
+    # Pending payments as of the moment the report runs (live Odoo query,
+    # same as /dashboard/pendientes/), scoped to the same sucursales
+    # selected for the rest of the report.
+    context["pendientes_hasta"] = date.today()
+    context["pendientes"] = _obtener_facturas_pendientes(
+        context["sucursales_seleccionadas"], context["pendientes_hasta"]
+    )
+
+    # Top proveedores across EVERY active sucursal, not just the ones
+    # selected above - the point is comparing a provider's spend
+    # company-wide. Flat top-15 (proveedor, sucursal count, monto) rather
+    # than a full sucursal x semana breakdown - that level of detail is
+    # what /dashboard/proveedores/ is for.
+    sucursales_todas = Sucursal.objects.filter(activa=True)
+    gastos_todas = GastoReal.objects.filter(sucursal__in=sucursales_todas, semana__in=context["semanas"])
+    context["top_proveedores_todas_sucursales"] = list(
+        gastos_todas.values("proveedor_nombre")
+        .annotate(total=Sum("monto"), num_sucursales=Count("sucursal", distinct=True))
+        .order_by("-total")[:TOP_PROVEEDORES]
+    )
 
     html = render_to_string("presupuestos/reporte_pdf.html", context)
     buffer = io.BytesIO()

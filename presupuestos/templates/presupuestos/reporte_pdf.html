@@ -132,8 +132,8 @@
 <div class="salto"></div>
 <h2>Anexo</h2>
 
-<p class="anexo-titulo">Anexo A - Detalle presupuesto vs. gasto real</p>
-{% if grupos_general %}
+<p class="anexo-titulo">Anexo A - Detalle presupuesto vs. gasto real (por sucursal y semana)</p>
+{% if anexo_a_grupos %}
 <table>
   <thead>
     <tr>
@@ -142,7 +142,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for grupo in grupos_general %}
+    {% for grupo in anexo_a_grupos %}
     <tr class="grupo">
       <td colspan="2">{{ grupo.etiqueta }} ({{ grupo.filas|length }})</td>
       <td class="num">${{ grupo.presupuesto|floatformat:2|intcomma }}</td>
@@ -165,38 +165,129 @@
 <p>Sin datos para el filtro actual.</p>
 {% endif %}
 
-<p class="anexo-titulo" style="margin-top: 16px;">Anexo B - Detalle por tipo de gasto</p>
-{% if grupos_tipo %}
+<div class="salto"></div>
+<p class="anexo-titulo" style="margin-top: 0;">Anexo B - Detalle por sucursal (por tipo de gasto, periodo completo)</p>
+{% if detalle_por_sucursal %}
+  {% for det in detalle_por_sucursal %}
+  <h3>{{ det.sucursal.nombre }}</h3>
+  {% if det.grupos %}
+  {% if det.grafica %}
+  <img class="grafica-img" src="{{ det.grafica }}">
+  {% endif %}
+  <table>
+    <thead>
+      <tr>
+        <th>Tipo de gasto</th>
+        <th class="num">Presupuesto</th><th class="num">Gasto real</th><th class="num">Restante</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for grupo in det.grupos %}
+      <tr>
+        <td>{{ grupo.etiqueta }}</td>
+        <td class="num">${{ grupo.presupuesto|floatformat:2|intcomma }}</td>
+        <td class="num">${{ grupo.gasto_real|floatformat:2|intcomma }}</td>
+        <td class="num {% if grupo.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ grupo.restante|floatformat:2|intcomma }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="grupo">
+        <td>Total {{ det.sucursal.nombre }}</td>
+        <td class="num">${{ det.total_presupuesto|floatformat:2|intcomma }}</td>
+        <td class="num">${{ det.total_gasto_real|floatformat:2|intcomma }}</td>
+        <td class="num">${{ det.total_restante|floatformat:2|intcomma }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p>Sin datos para el periodo mostrado.</p>
+  {% endif %}
+  {% endfor %}
+{% else %}
+<p>Sin sucursales seleccionadas.</p>
+{% endif %}
+
+<div class="salto"></div>
+<h2>Facturas pendientes de pago</h2>
+<p class="subtitulo" style="margin-top: -6px;">
+  Consulta en vivo a Odoo al momento de generar este reporte ({{ pendientes_hasta|date:"d/m/Y" }}) -
+  facturas sin pagar o con pago parcial, sucursales seleccionadas arriba.
+</p>
+
+<table class="kpis">
+  <tr>
+    <td>
+      <div class="kpi-valor kpi-rojo">${{ pendientes.total_pendiente|floatformat:2|intcomma }}</div>
+      <div class="kpi-etiqueta">Total pendiente de pago</div>
+    </td>
+    <td>
+      <div class="kpi-valor kpi-neutro">{{ pendientes.total_facturas }}</div>
+      <div class="kpi-etiqueta">Facturas sin pagar / parciales</div>
+    </td>
+  </tr>
+</table>
+
+{% if pendientes.grupos %}
 <table>
   <thead>
     <tr>
-      <th>Sucursal</th><th>Semana</th><th>Tipo de gasto</th>
-      <th class="num">Presupuesto</th><th class="num">Gasto real</th><th class="num">Restante</th>
+      <th>Factura</th><th>Proveedor</th><th>Sucursal</th>
+      <th>Fecha</th><th>Vencimiento</th>
+      <th class="num">Monto total</th><th class="num">Pendiente</th><th>Estado</th>
     </tr>
   </thead>
   <tbody>
-    {% for grupo in grupos_tipo %}
+    {% for grupo in pendientes.grupos %}
     <tr class="grupo">
-      <td colspan="3">{{ grupo.etiqueta }} ({{ grupo.filas|length }})</td>
-      <td class="num">${{ grupo.presupuesto|floatformat:2|intcomma }}</td>
-      <td class="num">${{ grupo.gasto_real|floatformat:2|intcomma }}</td>
-      <td class="num">${{ grupo.restante|floatformat:2|intcomma }}</td>
+      <td colspan="6">{{ grupo.etiqueta }} ({{ grupo.facturas|length }})</td>
+      <td class="num">${{ grupo.pendiente|floatformat:2|intcomma }}</td>
+      <td></td>
     </tr>
-    {% for fila in grupo.filas %}
+    {% for f in grupo.facturas %}
     <tr>
-      <td>{{ fila.sucursal.nombre }}</td>
-      <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
-      <td>{{ fila.tipo_gasto_nombre }}</td>
-      <td class="num">${{ fila.presupuesto|floatformat:2|intcomma }}</td>
-      <td class="num">${{ fila.gasto_real|floatformat:2|intcomma }}</td>
-      <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2|intcomma }}</td>
+      <td>{{ f.factura_numero }}</td>
+      <td>{{ f.proveedor_nombre }}</td>
+      <td>{{ f.sucursal.nombre }}</td>
+      <td>{{ f.fecha_factura|date:"d/m/Y" }}</td>
+      <td>{{ f.fecha_vencimiento|date:"d/m/Y"|default:"-" }}</td>
+      <td class="num">${{ f.monto_total|floatformat:2|intcomma }}</td>
+      <td class="num">${{ f.monto_pendiente|floatformat:2|intcomma }}</td>
+      <td>{{ f.estado_display }}</td>
     </tr>
     {% endfor %}
     {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p>Sin datos para el filtro actual.</p>
+<p>Sin facturas pendientes para las sucursales seleccionadas.</p>
+{% endif %}
+
+<div class="salto"></div>
+<h2>Proveedores - todas las sucursales</h2>
+<p class="subtitulo" style="margin-top: -6px;">
+  Top {{ top_proveedores_todas_sucursales|length }} proveedores por gasto real en el mismo periodo
+  ({{ num_semanas }} semanas), considerando TODAS las sucursales activas, no solo las seleccionadas arriba.
+</p>
+
+{% if top_proveedores_todas_sucursales %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th><th>Proveedor</th><th class="num">Sucursales</th><th class="num">Monto</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in top_proveedores_todas_sucursales %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td>{{ p.proveedor_nombre }}</td>
+      <td class="num">{{ p.num_sucursales }}</td>
+      <td class="num">${{ p.total|floatformat:2|intcomma }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Sin datos para el periodo mostrado.</p>
 {% endif %}
 
 <div id="footer_content">Reporte generado automaticamente - Presupuestos AP Sucursales - Fonda Argentina</div>
