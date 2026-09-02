@@ -81,12 +81,20 @@ class GastoRealAdmin(admin.ModelAdmin):
         "sucursal",
         "tipo_gasto",
         "fecha_factura",
+        "fecha_pago",
         "semana",
         "monto_formateado",
+        "coincide_pago",
         "payment_state",
     ]
     list_filter = ["sucursal", "tipo_gasto", "payment_state", "semana"]
     search_fields = ["factura_numero", "proveedor_nombre"]
+
+    @admin.display(description="Factura vs pagado", boolean=True)
+    def coincide_pago(self, obj):
+        if obj.monto_factura is None or obj.monto_pagado is None:
+            return None
+        return obj.monto_factura == obj.monto_pagado
 
     @admin.display(description="Monto", ordering="monto")
     def monto_formateado(self, obj):

@@ -10,6 +10,13 @@
 # cancelled, its payment was reverted, or the line no longer exists - is
 # deleted. This is how cancelled/un-paid invoices get removed automatically,
 # without a separate cancellation-handling path.
+#
+# semana is based on fecha_pago (real payment date via account.payment,
+# through account.move.reconciled_payment_ids), not the invoice date -
+# sampled 87% of bills are paid on a different date than invoiced, the
+# whole point of this app is tracking cash paid per week. See GastoReal's
+# docstring in models.py for the multi-payment simplification and the
+# monto_factura/monto_pagado audit fields.
 
 import datetime
 import logging
@@ -83,10 +90,32 @@ def run():
     bills = models.execute_kw(
         db, uid, password, "account.move", "search_read",
         [[["move_type", "=", "in_invoice"], ["payment_state", "in", PAID_STATES]]],
-        {"fields": ["id", "name", "invoice_date", "partner_id", "company_id", "payment_state"], "limit": 50000},
+        {
+            "fields": [
+                "id", "name", "invoice_date", "partner_id", "company_id", "payment_state",
+                "amount_total", "reconciled_payment_ids",
+            ],
+            "limit": 50000,
+        },
     )
     bill_by_id = {b["id"]: b for b in bills}
     bill_ids = list(bill_by_id.keys())
+
+    payment_ids = list({pid for b in bills for pid in b["reconciled_payment_ids"]})
+    payment_by_id = {}
+    for i in range(0, len(payment_ids), CHUNK):
+        chunk = payment_ids[i:i + CHUNK]
+        payments = models.execute_kw(
+            db, uid, password, "account.payment", "read", [chunk], {"fields": ["id", "date", "amount"]}
+        )
+        for p in payments:
+            payment_by_id[p["id"]] = p
+
+    for bill in bills:
+        pagos = [payment_by_id[pid] for pid in bill["reconciled_payment_ids"] if pid in payment_by_id]
+        fechas_pago = [p["date"] for p in pagos if p["date"]]
+        bill["fecha_pago"] = max(fechas_pago) if fechas_pago else bill["invoice_date"]
+        bill["monto_pagado"] = sum((p["amount"] for p in pagos), 0)
 
     all_lines = []
     for i in range(0, len(bill_ids), CHUNK):
@@ -122,8 +151,9 @@ def run():
         if not bill["invoice_date"]:
             skipped_no_date += 1
             continue
-        fecha = datetime.date.fromisoformat(bill["invoice_date"])
-        semana = iso_week_monday(fecha)
+        fecha_factura = datetime.date.fromisoformat(bill["invoice_date"])
+        fecha_pago = datetime.date.fromisoformat(bill["fecha_pago"]) if bill["fecha_pago"] else fecha_factura
+        semana = iso_week_monday(fecha_pago)
 
         tipo_gasto_id = resolve_tipo_gasto(
             line["account_id"], line["product_id"], prod_categ, account_map, category_map
@@ -136,9 +166,12 @@ def run():
             factura_numero=bill["name"] or "",
             proveedor_odoo_id=bill["partner_id"][0] if bill["partner_id"] else None,
             proveedor_nombre=bill["partner_id"][1] if bill["partner_id"] else "",
-            fecha_factura=fecha,
+            fecha_factura=fecha_factura,
+            fecha_pago=fecha_pago,
             semana=semana,
             monto=Decimal(str(line["price_subtotal"])),
+            monto_factura=Decimal(str(bill["amount_total"])),
+            monto_pagado=Decimal(str(bill["monto_pagado"])),
             payment_state=bill["payment_state"],
         )
         _, was_created = GastoReal.objects.update_or_create(odoo_move_line_id=line["id"], defaults=defaults)

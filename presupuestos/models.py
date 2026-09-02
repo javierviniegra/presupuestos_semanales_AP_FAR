@@ -147,6 +147,21 @@ class GastoReal(models.Model):
     from Odoo; never edited by users. tipo_gasto is resolved at sync time via
     the hybrid CuentaContableTipoGasto / CategoriaProductoTipoGasto mapping,
     and can be null if that line couldn't be classified yet.
+
+    semana (the week this line counts toward) is based on fecha_pago, not
+    fecha_factura - the point of this whole app is tracking cash actually
+    paid out per week, and 87% of sampled bills are paid on a different date
+    than they're invoiced, sometimes in a different week entirely.
+
+    When a bill has more than one reconciled payment (~4% of bills - real
+    installments, e.g. $20,000 + $18,048 on different dates), fecha_pago
+    uses the LATEST payment date and the full line amount counts toward
+    that week, rather than splitting the line across payment dates - a
+    deliberate simplification. monto_factura (the invoice's own total) and
+    monto_pagado (sum of its reconciled payments' own amounts) are stored
+    so a human can spot when they don't match - that mismatch is the signal
+    that a payment was split across invoices or otherwise isn't a clean
+    1:1 match, worth checking by hand rather than trusting the simplification.
     """
 
     PAYMENT_STATE_CHOICES = [
@@ -166,14 +181,28 @@ class GastoReal(models.Model):
     factura_numero = models.CharField(max_length=100)
     proveedor_odoo_id = models.IntegerField(null=True, blank=True)
     proveedor_nombre = models.CharField(max_length=255)
-    fecha_factura = models.DateField()
-    semana = models.DateField(help_text="Monday of the ISO week fecha_factura falls in.")
+    fecha_factura = models.DateField(help_text="Fecha de la factura en Odoo (invoice_date). Solo referencia.")
+    fecha_pago = models.DateField(
+        null=True, blank=True, help_text="Fecha real de pago (la mas reciente si hubo varios pagos). Define semana."
+    )
+    semana = models.DateField(help_text="Monday of the ISO week fecha_pago falls in.")
     monto = models.DecimalField(max_digits=12, decimal_places=2)
+    monto_factura = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Total de la factura completa (account.move.amount_total), igual en todas sus lineas.",
+    )
+    monto_pagado = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "Suma de los pagos reconciliados con esta factura. Si no coincide con monto_factura, "
+            "revisar a mano: puede ser un pago compartido con otras facturas."
+        ),
+    )
     payment_state = models.CharField(max_length=20, choices=PAYMENT_STATE_CHOICES)
     sincronizado_en = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-fecha_factura"]
+        ordering = ["-fecha_pago"]
         indexes = [
             models.Index(fields=["sucursal", "semana"]),
             models.Index(fields=["sucursal", "tipo_gasto", "semana"]),
