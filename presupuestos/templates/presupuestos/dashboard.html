@@ -8,6 +8,8 @@
 <style>
   :root {
     --verde: #035953;
+    --naranja: #eb6834;
+    --muted: #898781;
     --verde-oscuro: #023f3b;
     --crema: #f0e9d8;
     --texto: #2d2d2d;
@@ -194,7 +196,18 @@
   td.restante-pos { color: var(--verde-oscuro); font-weight: 600; }
 
   .vacio { padding: 24px; text-align: center; color: #888; background: #fff; border-radius: 12px; }
+
+  .graficas { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+  .grafica-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding: 16px;
+  }
+  .grafica-card h3 { margin: 0 0 12px; font-size: 15px; color: var(--verde-oscuro); }
+  .grafica-card canvas { max-height: 260px; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
 </head>
 <body>
 <header>
@@ -253,6 +266,23 @@
           {% endif %}
         {% endfor %}
       </div>
+      {% endif %}
+    </div>
+
+    <div class="reporte">
+      <h2>Gasto real vs. presupuesto por sucursal</h2>
+      {% if graficas %}
+      <div class="graficas">
+        {% for g in graficas %}
+        <div class="grafica-card">
+          <h3>{{ g.sucursal_nombre }}</h3>
+          <canvas id="grafica-{{ g.sucursal_id }}"></canvas>
+        </div>
+        {% endfor %}
+      </div>
+      {{ graficas|json_script:"graficas-data" }}
+      {% else %}
+      <div class="vacio">Selecciona al menos una sucursal para ver su gráfica.</div>
       {% endif %}
     </div>
 
@@ -377,6 +407,69 @@ function quitarSucursal(event, id) {
   if (cb) { cb.checked = false; }
   document.getElementById('form-filtros').submit();
   return false;
+}
+
+const datosGraficasEl = document.getElementById('graficas-data');
+if (datosGraficasEl) {
+  const graficas = JSON.parse(datosGraficasEl.textContent);
+  graficas.forEach(g => {
+    const ctx = document.getElementById('grafica-' + g.sucursal_id);
+    if (!ctx) return;
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: g.etiquetas,
+        datasets: [
+          {
+            label: 'Gasto real',
+            data: g.gasto_real,
+            borderColor: '#035953',
+            backgroundColor: '#035953',
+            borderWidth: 2,
+            pointRadius: 3,
+            tension: 0,
+          },
+          {
+            label: 'Presupuesto',
+            data: g.presupuesto,
+            borderColor: '#eb6834',
+            backgroundColor: '#eb6834',
+            borderWidth: 2,
+            pointRadius: 3,
+            tension: 0,
+          },
+          {
+            label: 'Tendencia (gasto real)',
+            data: g.tendencia,
+            borderColor: '#898781',
+            backgroundColor: '#898781',
+            borderWidth: 2,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            tension: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: (item) => item.dataset.label + ': $' + item.parsed.y.toLocaleString('es-MX', { minimumFractionDigits: 2 }),
+            },
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { callback: (v) => '$' + v.toLocaleString('es-MX') },
+          },
+        },
+      },
+    });
+  });
 }
 </script>
 </body>

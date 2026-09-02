@@ -72,6 +72,20 @@ def _agrupar(filas, campo):
     return [grupos[k] for k in orden]
 
 
+def _tendencia_lineal(valores):
+    """Least-squares linear trend over an evenly-spaced series (x = 0..n-1)."""
+    n = len(valores)
+    if n < 2:
+        return list(valores)
+    x_mean = (n - 1) / 2
+    y_mean = sum(valores) / n
+    num = sum((i - x_mean) * (valores[i] - y_mean) for i in range(n))
+    den = sum((i - x_mean) ** 2 for i in range(n))
+    pendiente = num / den if den else 0
+    intercepto = y_mean - pendiente * x_mean
+    return [round(pendiente * i + intercepto, 2) for i in range(n)]
+
+
 @login_required
 def dashboard(request):
     sucursales_disponibles, restringido_a_una = _sucursales_para_usuario(request.user)
@@ -152,6 +166,22 @@ def dashboard(request):
             }
         )
 
+    semanas_asc = list(reversed(semanas))
+    graficas = []
+    for suc in sucursales_seleccionadas:
+        gasto_valores = [float(gasto_general.get((suc.id, s)) or 0) for s in semanas_asc]
+        presupuesto_valores = [float(pres_general.get((suc.id, s)) or 0) for s in semanas_asc]
+        graficas.append(
+            {
+                "sucursal_id": suc.id,
+                "sucursal_nombre": suc.nombre,
+                "etiquetas": [f"Sem {s.isocalendar()[1]}" for s in semanas_asc],
+                "gasto_real": gasto_valores,
+                "presupuesto": presupuesto_valores,
+                "tendencia": _tendencia_lineal(gasto_valores),
+            }
+        )
+
     agrupar_general = request.GET.get("g_agrupar", "semana")
     if agrupar_general not in dict(OPCIONES_AGRUPAR_GENERAL):
         agrupar_general = "semana"
@@ -172,5 +202,6 @@ def dashboard(request):
         "agrupar_tipo": agrupar_tipo,
         "opciones_agrupar_general": OPCIONES_AGRUPAR_GENERAL,
         "opciones_agrupar_tipo": OPCIONES_AGRUPAR_TIPO,
+        "graficas": graficas,
     }
     return render(request, "presupuestos/dashboard.html", context)
