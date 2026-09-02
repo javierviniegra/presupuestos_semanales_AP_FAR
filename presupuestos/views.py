@@ -174,7 +174,7 @@ def _calcular_contexto_dashboard(request):
                     {"sucursal": suc, "semana": sem, "presupuesto": presupuesto, "gasto_real": gasto, "restante": presupuesto - gasto}
                 )
 
-    pres_por_tipo = {
+    pres_por_tipo_raw = {
         (r["sucursal_id"], r["semana"], r["tipo_gasto_id"]): r["total"]
         for r in presupuestos.values("sucursal_id", "semana", "tipo_gasto_id").annotate(total=Sum("monto"))
     }
@@ -183,24 +183,49 @@ def _calcular_contexto_dashboard(request):
         for r in gastos.values("sucursal_id", "semana", "tipo_gasto_id").annotate(total=Sum("monto"))
     }
 
-    tipos_gasto = {t.id: t.nombre for t in TipoGasto.objects.all()}
-    claves = set(pres_por_tipo) | set(gasto_por_tipo)
+    tipos_gasto_objs = list(TipoGasto.objects.all())
+    tipos_gasto = {t.id: t.nombre for t in tipos_gasto_objs}
+    todos_los_tipo_ids = [t.id for t in tipos_gasto_objs]
+
+    # Group presupuesto by (sucursal, semana) so a blank-tipo_gasto row (the
+    # "everything else" amount) can be spread evenly across whichever
+    # tipos_gasto did NOT get an explicit amount that same sucursal/semana.
+    pres_agrupado = {}
+    for (suc_id, sem, tipo_id), monto in pres_por_tipo_raw.items():
+        pres_agrupado.setdefault((suc_id, sem), {})[tipo_id] = monto
+
+    pres_resuelto = {}
+    for (suc_id, sem), por_tipo in pres_agrupado.items():
+        especificados = {tid: monto for tid, monto in por_tipo.items() if tid is not None}
+        for tid, monto in especificados.items():
+            pres_resuelto[(suc_id, sem, tid)] = monto
+
+        remanente = por_tipo.get(None)
+        if remanente:
+            no_especificados = [tid for tid in todos_los_tipo_ids if tid not in especificados]
+            if no_especificados:
+                parte = remanente / len(no_especificados)
+                for tid in no_especificados:
+                    pres_resuelto[(suc_id, sem, tid)] = pres_resuelto.get((suc_id, sem, tid), 0) + parte
+
+    claves = set(pres_resuelto) | set(gasto_por_tipo)
 
     filas_tipo = []
     for suc_id, sem, tipo_id in claves:
         suc = sucursales_por_id.get(suc_id)
         if not suc:
             continue
-        presupuesto = pres_por_tipo.get((suc_id, sem, tipo_id)) or 0
+        presupuesto = pres_resuelto.get((suc_id, sem, tipo_id)) or 0
         gasto = gasto_por_tipo.get((suc_id, sem, tipo_id)) or 0
         filas_tipo.append(
             {
                 "sucursal": suc,
                 "semana": sem,
-                # None covers two different things bucketed together: a
-                # deliberate lump-sum Presupuesto (no tipo_gasto chosen) and
-                # a GastoReal line the Odoo mapping couldn't classify.
-                "tipo_gasto_nombre": tipos_gasto.get(tipo_id, "Sin categoria (total o sin clasificar)"),
+                # tipo_id is None here only for a GastoReal line the Odoo
+                # mapping couldn't classify - presupuesto's own None
+                # ("everything else") was already spread across real tipos
+                # above, so it never reaches this fallback.
+                "tipo_gasto_nombre": tipos_gasto.get(tipo_id, "Sin categoria (sin clasificar)"),
                 "presupuesto": presupuesto,
                 "gasto_real": gasto,
                 "restante": presupuesto - gasto,

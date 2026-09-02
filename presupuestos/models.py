@@ -95,12 +95,16 @@ class CategoriaProductoTipoGasto(models.Model):
 
 class Presupuesto(models.Model):
     """
-    tipo_gasto is optional: leave it blank to enter one lump-sum budget for
-    the whole sucursal/semana instead of breaking it down by category. Both
-    styles can coexist - the overall dashboard table sums all Presupuesto
-    rows for a sucursal/semana regardless of tipo_gasto, so a lump-sum entry
-    and a category breakdown are both counted correctly there. It's on the
-    person entering budgets not to double-enter both for the same week.
+    tipo_gasto is optional. Leave it blank to capture "everything else" for
+    a sucursal/semana: the dashboard's by-tipo breakdown (see
+    _calcular_contexto_dashboard in views.py) spreads that amount evenly
+    across whichever TipoGasto records do NOT have their own explicit
+    Presupuesto row for that same sucursal/semana. E.g. Carne=$120,000 and
+    Oficina=$45,000 as explicit rows, plus one blank-tipo_gasto row for the
+    remaining 10 tipos - each of those 10 gets 1/10th of that row's amount.
+    The overall dashboard table just sums every Presupuesto row for a
+    sucursal/semana regardless of tipo_gasto, so it's correct either way
+    without needing to know about this split.
     """
 
     sucursal = models.ForeignKey(Sucursal, on_delete=models.CASCADE, related_name="presupuestos")
@@ -110,7 +114,11 @@ class Presupuesto(models.Model):
         related_name="presupuestos",
         null=True,
         blank=True,
-        help_text="Deja en blanco para capturar el presupuesto total de la semana sin desglosar por tipo de gasto.",
+        help_text=(
+            "Deja en blanco para capturar 'todo lo demas': ese monto se reparte en partes "
+            "iguales entre los tipos de gasto que NO tengan su propio presupuesto capturado "
+            "para esta misma sucursal y semana."
+        ),
     )
     semana = models.DateField(help_text="Monday of the ISO week this budget applies to.")
     monto = models.DecimalField(max_digits=12, decimal_places=2)
