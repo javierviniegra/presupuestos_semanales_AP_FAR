@@ -203,8 +203,13 @@ def _calcular_contexto_dashboard(request):
         remanente = por_tipo.get(None)
         if remanente:
             no_especificados = [tid for tid in todos_los_tipo_ids if tid not in especificados]
+            # The "sin clasificar" bucket is also part of "everything else" -
+            # give it a slice too, but only if this sucursal/semana actually
+            # has unclassified gasto real (no phantom row otherwise).
+            if (suc_id, sem, None) in gasto_por_tipo:
+                no_especificados.append(None)
             if no_especificados:
-                parte = remanente / len(no_especificados)
+                parte = round(remanente / len(no_especificados), 2)
                 for tid in no_especificados:
                     pres_resuelto[(suc_id, sem, tid)] = pres_resuelto.get((suc_id, sem, tid), 0) + parte
 
@@ -221,10 +226,10 @@ def _calcular_contexto_dashboard(request):
             {
                 "sucursal": suc,
                 "semana": sem,
-                # tipo_id is None here only for a GastoReal line the Odoo
-                # mapping couldn't classify - presupuesto's own None
-                # ("everything else") was already spread across real tipos
-                # above, so it never reaches this fallback.
+                # tipo_id None means "sin clasificar" - unclassified GastoReal
+                # lines, which also get a slice of the blank-tipo_gasto
+                # presupuesto (see the remanente split above) when that
+                # sucursal/semana actually has any unclassified gasto.
                 "tipo_gasto_nombre": tipos_gasto.get(tipo_id, "Sin categoria (sin clasificar)"),
                 "presupuesto": presupuesto,
                 "gasto_real": gasto,
