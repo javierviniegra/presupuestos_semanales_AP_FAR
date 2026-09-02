@@ -159,7 +159,10 @@ def dashboard(request):
             {
                 "sucursal": suc,
                 "semana": sem,
-                "tipo_gasto_nombre": tipos_gasto.get(tipo_id, "(sin resolver: revisar mapeo Odoo)"),
+                # None covers two different things bucketed together: a
+                # deliberate lump-sum Presupuesto (no tipo_gasto chosen) and
+                # a GastoReal line the Odoo mapping couldn't classify.
+                "tipo_gasto_nombre": tipos_gasto.get(tipo_id, "Sin categoria (total o sin clasificar)"),
                 "presupuesto": presupuesto,
                 "gasto_real": gasto,
                 "restante": presupuesto - gasto,

@@ -94,8 +94,24 @@ class CategoriaProductoTipoGasto(models.Model):
 
 
 class Presupuesto(models.Model):
+    """
+    tipo_gasto is optional: leave it blank to enter one lump-sum budget for
+    the whole sucursal/semana instead of breaking it down by category. Both
+    styles can coexist - the overall dashboard table sums all Presupuesto
+    rows for a sucursal/semana regardless of tipo_gasto, so a lump-sum entry
+    and a category breakdown are both counted correctly there. It's on the
+    person entering budgets not to double-enter both for the same week.
+    """
+
     sucursal = models.ForeignKey(Sucursal, on_delete=models.CASCADE, related_name="presupuestos")
-    tipo_gasto = models.ForeignKey(TipoGasto, on_delete=models.PROTECT, related_name="presupuestos")
+    tipo_gasto = models.ForeignKey(
+        TipoGasto,
+        on_delete=models.PROTECT,
+        related_name="presupuestos",
+        null=True,
+        blank=True,
+        help_text="Deja en blanco para capturar el presupuesto total de la semana sin desglosar por tipo de gasto.",
+    )
     semana = models.DateField(help_text="Monday of the ISO week this budget applies to.")
     monto = models.DecimalField(max_digits=12, decimal_places=2)
     creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
@@ -113,7 +129,8 @@ class Presupuesto(models.Model):
         verbose_name_plural = "presupuestos"
 
     def __str__(self):
-        return f"{self.sucursal} / {self.tipo_gasto} / {self.semana} = {self.monto}"
+        tipo = self.tipo_gasto or "Total"
+        return f"{self.sucursal} / {tipo} / {self.semana} = {self.monto}"
 
 
 class GastoReal(models.Model):
