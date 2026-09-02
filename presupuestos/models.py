@@ -186,7 +186,10 @@ class GastoReal(models.Model):
         null=True, blank=True, help_text="Fecha real de pago (la mas reciente si hubo varios pagos). Define semana."
     )
     semana = models.DateField(help_text="Monday of the ISO week fecha_pago falls in.")
-    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    monto = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        help_text="Linea con IVA incluido (Odoo price_total, no price_subtotal) - es el efectivo real pagado.",
+    )
     monto_factura = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True,
         help_text="Total de la factura completa (account.move.amount_total), igual en todas sus lineas.",

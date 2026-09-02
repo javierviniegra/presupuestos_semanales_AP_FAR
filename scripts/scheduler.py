@@ -123,7 +123,7 @@ def run():
         lines = models.execute_kw(
             db, uid, password, "account.move.line", "search_read",
             [[["move_id", "in", chunk], ["display_type", "=", "product"]]],
-            {"fields": ["id", "move_id", "account_id", "product_id", "price_subtotal"]},
+            {"fields": ["id", "move_id", "account_id", "product_id", "price_total"]},
         )
         all_lines.extend(lines)
 
@@ -169,7 +169,7 @@ def run():
             fecha_factura=fecha_factura,
             fecha_pago=fecha_pago,
             semana=semana,
-            monto=Decimal(str(line["price_subtotal"])),
+            monto=Decimal(str(line["price_total"])),
             monto_factura=Decimal(str(bill["amount_total"])),
             monto_pagado=Decimal(str(bill["monto_pagado"])),
             payment_state=bill["payment_state"],
