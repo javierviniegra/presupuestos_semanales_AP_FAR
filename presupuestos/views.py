@@ -25,6 +25,8 @@ OPCIONES_SEMANAS = [4, 8, 12, 26, 52]
 
 OPCIONES_AGRUPAR_GENERAL = [("semana", "Semana"), ("sucursal", "Sucursal")]
 OPCIONES_AGRUPAR_TIPO = [("tipo_gasto", "Tipo de gasto"), ("semana", "Semana"), ("sucursal", "Sucursal")]
+OPCIONES_AGRUPAR_PROVEEDOR = [("proveedor", "Proveedor"), ("semana", "Semana"), ("sucursal", "Sucursal")]
+TOP_PROVEEDORES = 15
 
 
 def home(request):
@@ -82,6 +84,37 @@ def _agrupar(filas, campo):
         orden.sort(reverse=True)
     else:
         orden.sort(key=lambda k: grupos[k]["etiqueta"])
+
+    return [grupos[k] for k in orden]
+
+
+def _clave_grupo_proveedor(fila, campo):
+    if campo == "proveedor":
+        return fila["proveedor_nombre"], fila["proveedor_nombre"]
+    if campo == "semana":
+        sem = fila["semana"]
+        return sem, f"Semana {sem.isocalendar()[1]} ({sem.strftime('%d/%m/%Y')})"
+    if campo == "sucursal":
+        return fila["sucursal"].id, fila["sucursal"].nombre
+    return None, "Todos"
+
+
+def _agrupar_proveedor(filas, campo):
+    grupos = {}
+    orden = []
+    for fila in filas:
+        clave, etiqueta = _clave_grupo_proveedor(fila, campo)
+        if clave not in grupos:
+            grupos[clave] = {"etiqueta": etiqueta, "filas": [], "monto": 0}
+            orden.append(clave)
+        g = grupos[clave]
+        g["filas"].append(fila)
+        g["monto"] += fila["monto"]
+
+    if campo == "semana":
+        orden.sort(reverse=True)
+    else:
+        orden.sort(key=lambda k: grupos[k]["monto"], reverse=True)
 
     return [grupos[k] for k in orden]
 
@@ -370,6 +403,69 @@ def detalle_semana(request, sucursal_id, semana):
         "total_restante": total_presupuesto - total_gasto_real,
     }
     return render(request, "presupuestos/detalle_semana.html", context)
+
+
+@login_required
+def reporte_proveedores(request):
+    """
+    Same sucursal/semana filter as the dashboard, but never restricted to a
+    single branch's drill-down - this combines every selected+active
+    sucursal, which is the whole point (compare a provider's spend across
+    branches, not just within one).
+    """
+    sucursales_disponibles, restringido_a_una = _sucursales_para_usuario(request.user)
+
+    if restringido_a_una:
+        sucursales_seleccionadas = list(sucursales_disponibles)
+    elif "filtro_aplicado" in request.GET:
+        seleccion = request.GET.getlist("sucursal")
+        sucursales_seleccionadas = list(sucursales_disponibles.filter(pk__in=seleccion))
+    else:
+        sucursales_seleccionadas = list(sucursales_disponibles)
+
+    try:
+        num_semanas = int(request.GET.get("semanas", SEMANAS_POR_DEFECTO))
+    except ValueError:
+        num_semanas = SEMANAS_POR_DEFECTO
+    num_semanas = max(1, min(num_semanas, 52))
+
+    hoy = date.today()
+    semana_actual = _lunes_de_semana(hoy)
+    semanas = [semana_actual - timedelta(weeks=i) for i in range(num_semanas)]
+
+    gastos = GastoReal.objects.filter(sucursal__in=sucursales_seleccionadas, semana__in=semanas)
+    sucursales_por_id = {s.id: s for s in sucursales_seleccionadas}
+
+    filas_proveedor = []
+    for r in gastos.values("proveedor_nombre", "sucursal_id", "semana").annotate(total=Sum("monto")):
+        suc = sucursales_por_id.get(r["sucursal_id"])
+        if not suc:
+            continue
+        filas_proveedor.append(
+            {"proveedor_nombre": r["proveedor_nombre"], "sucursal": suc, "semana": r["semana"], "monto": r["total"]}
+        )
+
+    agrupar = request.GET.get("agrupar", "proveedor")
+    if agrupar not in dict(OPCIONES_AGRUPAR_PROVEEDOR):
+        agrupar = "proveedor"
+
+    top_proveedores = list(
+        gastos.values("proveedor_nombre").annotate(total=Sum("monto")).order_by("-total")[:TOP_PROVEEDORES]
+    )
+
+    context = {
+        "sucursales_disponibles": sucursales_disponibles,
+        "sucursales_seleccionadas": sucursales_seleccionadas,
+        "sucursales_seleccionadas_ids": {s.id for s in sucursales_seleccionadas},
+        "restringido_a_una": restringido_a_una,
+        "num_semanas": num_semanas,
+        "opciones_semanas": OPCIONES_SEMANAS,
+        "grupos_proveedor": _agrupar_proveedor(filas_proveedor, agrupar),
+        "agrupar": agrupar,
+        "opciones_agrupar": OPCIONES_AGRUPAR_PROVEEDOR,
+        "top_proveedores": top_proveedores,
+    }
+    return render(request, "presupuestos/reporte_proveedores.html", context)
 
 
 @login_required
