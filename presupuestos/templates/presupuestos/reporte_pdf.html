@@ -13,7 +13,8 @@
   }
   body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #2d2d2d; }
   h1 { color: #023f3b; font-size: 18pt; margin: 0 0 2px; }
-  h2 { color: #023f3b; font-size: 12pt; margin: 18px 0 6px; }
+  h2 { color: #023f3b; font-size: 13pt; margin: 0 0 10px; border-bottom: 1px solid #e1e0d9; padding-bottom: 4px; }
+  h3 { color: #023f3b; font-size: 11pt; margin: 16px 0 6px; }
   .subtitulo { color: #666; font-size: 9pt; margin: 0 0 12px; }
   .meta { color: #888; font-size: 8pt; margin-bottom: 18px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
@@ -25,6 +26,21 @@
   .restante-pos { color: #023f3b; }
   #footer_content { font-size: 7pt; color: #999; text-align: center; }
   .logo { width: 90px; }
+  .salto { page-break-before: always; }
+
+  .kpis { width: 100%; margin: 14px 0 20px; }
+  .kpis td { border: none; text-align: center; padding: 10px 4px; }
+  .kpi-valor { font-size: 17pt; font-weight: bold; }
+  .kpi-etiqueta { font-size: 8pt; color: #666; text-transform: uppercase; letter-spacing: 0.03em; }
+  .kpi-verde { color: #023f3b; }
+  .kpi-rojo { color: #ba2121; }
+  .kpi-neutro { color: #2d2d2d; }
+
+  .narrativa { font-size: 10pt; background: #f0e9d8; padding: 10px 14px; border-radius: 4px; margin-bottom: 18px; }
+
+  .anexo-titulo { color: #898781; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 4px; }
+
+  .grafica-img { width: 100%; margin-bottom: 14px; }
 </style>
 </head>
 <body>
@@ -46,7 +62,76 @@
   {% for suc in sucursales_seleccionadas %}{{ suc.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}(ninguna){% endfor %}
 </p>
 
-<h2>Presupuesto vs. gasto real</h2>
+<h2>Resumen</h2>
+
+<table class="kpis">
+  <tr>
+    <td>
+      <div class="kpi-valor kpi-neutro">${{ total_presupuesto|floatformat:0 }}</div>
+      <div class="kpi-etiqueta">Presupuesto total</div>
+    </td>
+    <td>
+      <div class="kpi-valor kpi-neutro">${{ total_gasto_real|floatformat:0 }}</div>
+      <div class="kpi-etiqueta">Gasto real total</div>
+    </td>
+    <td>
+      <div class="kpi-valor {% if total_restante < 0 %}kpi-rojo{% else %}kpi-verde{% endif %}">${{ total_restante|floatformat:0 }}</div>
+      <div class="kpi-etiqueta">Restante</div>
+    </td>
+    <td>
+      <div class="kpi-valor {% if pct_variacion > 0 %}kpi-rojo{% else %}kpi-verde{% endif %}">
+        {% if pct_variacion is not None %}{{ pct_variacion }}%{% else %}N/D{% endif %}
+      </div>
+      <div class="kpi-etiqueta">Vs. presupuesto</div>
+    </td>
+  </tr>
+</table>
+
+<div class="narrativa">
+  {% if total_presupuesto == 0 %}
+    No hay presupuesto capturado para el periodo y sucursales seleccionadas. El gasto real mostrado no tiene contra qué compararse todavia.
+  {% elif total_restante < 0 %}
+    El gasto real supero el presupuesto en ${{ total_restante|floatformat:0|slice:"1:" }} ({{ pct_variacion }}%) durante el periodo mostrado.
+  {% else %}
+    El gasto real se mantuvo dentro del presupuesto, con un remanente de ${{ total_restante|floatformat:0 }} ({{ pct_variacion }}%) durante el periodo mostrado.
+  {% endif %}
+</div>
+
+{% if mayores_desviaciones %}
+<h3>Mayores desviaciones (sucursal / semana)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Sucursal</th><th>Semana</th>
+      <th class="num">Presupuesto</th><th class="num">Gasto real</th><th class="num">Restante</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for fila in mayores_desviaciones %}
+    <tr>
+      <td>{{ fila.sucursal.nombre }}</td>
+      <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
+      <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
+      <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
+      <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2 }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if graficas_imagenes %}
+<div class="salto"></div>
+<h2>Tendencia por sucursal</h2>
+{% for g in graficas_imagenes %}
+<img class="grafica-img" src="{{ g.imagen }}">
+{% endfor %}
+{% endif %}
+
+<div class="salto"></div>
+<h2>Anexo</h2>
+
+<p class="anexo-titulo">Anexo A - Detalle presupuesto vs. gasto real</p>
 {% if grupos_general %}
 <table>
   <thead>
@@ -79,7 +164,7 @@
 <p>Sin datos para el filtro actual.</p>
 {% endif %}
 
-<h2>Por tipo de gasto</h2>
+<p class="anexo-titulo" style="margin-top: 16px;">Anexo B - Detalle por tipo de gasto</p>
 {% if grupos_tipo %}
 <table>
   <thead>

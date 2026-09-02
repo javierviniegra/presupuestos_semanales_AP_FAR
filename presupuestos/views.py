@@ -1,7 +1,12 @@
+import base64
 import io
 from datetime import date, timedelta
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
@@ -93,6 +98,31 @@ def _tendencia_lineal(valores):
     pendiente = num / den if den else 0
     intercepto = y_mean - pendiente * x_mean
     return [round(pendiente * i + intercepto, 2) for i in range(n)]
+
+
+def _grafica_png_base64(grafica):
+    """Same series/colors as the dashboard's Chart.js version, rendered as a
+    static image since the PDF engine doesn't run JavaScript."""
+    fig, ax = plt.subplots(figsize=(7, 2.6), dpi=150)
+    x = range(len(grafica["etiquetas"]))
+    ax.plot(x, grafica["gasto_real"], color="#035953", linewidth=2, marker="o", markersize=3, label="Gasto real")
+    ax.plot(x, grafica["presupuesto"], color="#eb6834", linewidth=2, marker="o", markersize=3, label="Presupuesto")
+    ax.plot(x, grafica["tendencia"], color="#898781", linewidth=1.5, linestyle="--", label="Tendencia (gasto real)")
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(grafica["etiquetas"], fontsize=6, rotation=45, ha="right")
+    ax.tick_params(axis="y", labelsize=7)
+    ax.yaxis.set_major_formatter(lambda v, _: f"${v:,.0f}")
+    ax.set_title(grafica["sucursal_nombre"], fontsize=9, color="#023f3b", fontweight="bold", loc="left")
+    ax.legend(fontsize=6, loc="upper right", frameon=False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", color="#e1e0d9", linewidth=0.5)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    plt.close(fig)
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def _calcular_contexto_dashboard(request):
@@ -215,6 +245,7 @@ def _calcular_contexto_dashboard(request):
         "opciones_agrupar_general": OPCIONES_AGRUPAR_GENERAL,
         "opciones_agrupar_tipo": OPCIONES_AGRUPAR_TIPO,
         "graficas": graficas,
+        "filas_general": filas_general,
     }
 
 
@@ -230,6 +261,25 @@ def reporte_pdf(request):
     context["generado_en"] = timezone.now()
     context["generado_por"] = request.user.get_username()
     context["logo_path"] = str(LOGO_PATH)
+
+    total_presupuesto = sum(g["presupuesto"] for g in context["grupos_general"])
+    total_gasto_real = sum(g["gasto_real"] for g in context["grupos_general"])
+    total_restante = total_presupuesto - total_gasto_real
+    context["total_presupuesto"] = total_presupuesto
+    context["total_gasto_real"] = total_gasto_real
+    context["total_restante"] = total_restante
+    context["pct_variacion"] = (
+        round((total_gasto_real / total_presupuesto - 1) * 100, 1) if total_presupuesto else None
+    )
+
+    # Only rows with a captured presupuesto can have a meaningful variance -
+    # a row with $0 presupuesto isn't "over budget", it's just uncaptured.
+    con_presupuesto = [f for f in context["filas_general"] if f["presupuesto"]]
+    context["mayores_desviaciones"] = sorted(con_presupuesto, key=lambda f: f["restante"])[:8]
+
+    context["graficas_imagenes"] = [
+        {"sucursal_nombre": g["sucursal_nombre"], "imagen": _grafica_png_base64(g)} for g in context["graficas"]
+    ]
 
     html = render_to_string("presupuestos/reporte_pdf.html", context)
     buffer = io.BytesIO()
