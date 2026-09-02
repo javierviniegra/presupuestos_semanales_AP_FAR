@@ -40,7 +40,9 @@ def _sucursales_para_usuario(user):
 
 def _clave_grupo(fila, campo):
     if campo == "semana":
-        return fila["semana"], fila["semana"].strftime("%d/%m/%Y")
+        sem = fila["semana"]
+        etiqueta = f"Semana {sem.isocalendar()[1]} ({sem.strftime('%d/%m/%Y')})"
+        return sem, etiqueta
     if campo == "sucursal":
         return fila["sucursal"].id, fila["sucursal"].nombre
     if campo == "tipo_gasto":

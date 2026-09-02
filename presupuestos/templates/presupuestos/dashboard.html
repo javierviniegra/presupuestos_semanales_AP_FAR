@@ -289,7 +289,7 @@
               {% for fila in grupo.filas %}
               <tr>
                 <td>{{ fila.sucursal.nombre }}</td>
-                <td>{{ fila.semana|date:"d/m/Y" }}</td>
+                <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
                 <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
                 <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
                 <td class="num {% if fila.restante < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante|floatformat:2 }}</td>
@@ -337,7 +337,7 @@
               {% for fila in grupo.filas %}
               <tr>
                 <td>{{ fila.sucursal.nombre }}</td>
-                <td>{{ fila.semana|date:"d/m/Y" }}</td>
+                <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
                 <td>{{ fila.tipo_gasto_nombre }}</td>
                 <td class="num">${{ fila.presupuesto|floatformat:2 }}</td>
                 <td class="num">${{ fila.gasto_real|floatformat:2 }}</td>
