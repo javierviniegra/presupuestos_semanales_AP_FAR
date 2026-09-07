@@ -74,3 +74,10 @@ python manage.py runserver 8010
 ```
 
 Port 8010 is used instead of Django's default 8000 because 8000 is already taken by XAMPP on this machine.
+
+## Documentation
+
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how to enter monthly budgets,
+  read the dashboard, and generate the PDF/provider/pending-invoice reports.
+- [PROJECT_CONTEXT_REPORT.md](PROJECT_CONTEXT_REPORT.md): architecture and
+  data model reference, kept up to date for session handoffs.
