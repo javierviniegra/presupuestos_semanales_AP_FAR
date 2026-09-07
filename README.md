@@ -1,18 +1,24 @@
-# Presupuestos Semanales AP - Sucursales
+# Presupuestos AP - Sucursales
 
 ## Overview
 
-Web application to track and control weekly branch (sucursal) budgets against
-actual spend. It pulls actual payments per branch from Odoo, lets an
-administrator enter weekly budgets, and reports budget vs actual with
-drill-down by expense type and by provider.
+Web application to track and control branch (sucursal) budgets against
+actual spend. Budgets are captured monthly per branch (prorated evenly
+across the days of the month) but measured weekly. It pulls actual
+payments per branch from Odoo, lets an administrator enter monthly
+budgets, and reports budget vs actual with drill-down by expense type
+and by provider.
 
 ## Scope
 
 ```text
 Pull actual payments by branch from Odoo (one or several branches at a time).
-Administrator enters weekly budgets per branch.
-Home page shows two tables: budget/week/actual/remaining, overall and by expense type.
+Administrator enters monthly budgets per branch (optionally split by expense type).
+A month's budget is prorated evenly across its calendar days; a week spanning
+two months blends the daily rate from each month.
+Home page shows: budget/week/actual/remaining (overall and by expense type),
+a per-branch purchase comparison chart (logarithmic scale), and a monthly
+running-balance view that resets each month and flags overspend.
 Each budget row links to a detail report: payments broken down by provider, charts,
 export to Excel or an executive PDF report for Direccion General.
 Expense type is resolved from a provider -> expense-type mapping dictionary
