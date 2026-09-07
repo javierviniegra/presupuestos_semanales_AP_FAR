@@ -289,6 +289,18 @@
 
     <div class="reporte">
       <h2>Gasto real vs. presupuesto por sucursal</h2>
+      {% if grafica_global %}
+      <div class="grafica-card" style="margin-bottom: 16px;">
+        <h3>Compras por sucursal (comparativo)</h3>
+        <p style="font-size: 12px; color: #888; margin: 0 0 8px;">
+          Escala logarítmica: cada línea del eje multiplica por 10 (no es un incremento fijo) &mdash;
+          así se compara el comportamiento de una sucursal que compra poco contra una que compra mucho,
+          en la misma gráfica.
+        </p>
+        <canvas id="grafica-global" style="max-height: 340px;"></canvas>
+      </div>
+      {{ grafica_global|json_script:"grafica-global-data" }}
+      {% endif %}
       {% if graficas %}
       <div class="graficas">
         {% for g in graficas %}
@@ -400,6 +412,50 @@
       <div class="vacio">Sin datos por tipo de gasto para el filtro actual.</div>
       {% endif %}
     </div>
+
+    <div class="reporte">
+      <div class="reporte-header">
+        <h2>Avance mensual del presupuesto</h2>
+      </div>
+      {% if avance_mensual %}
+        {% for av_suc in avance_mensual %}
+        <details class="grupo">
+          <summary style="grid-template-columns: 1fr;">
+            <span>{{ av_suc.sucursal.nombre }}</span>
+          </summary>
+          <div style="padding: 4px 16px 16px;">
+            {% for av_mes in av_suc.meses %}
+            <h3 style="margin: 16px 0 8px; font-size: 14px; color: var(--verde-oscuro);">
+              {{ av_mes.mes|date:"F Y"|capfirst }} &mdash; Presupuesto: ${{ av_mes.presupuesto_mes|floatformat:2|intcomma }}
+            </h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Semana</th>
+                  <th class="num">Gasto de la semana (en este mes)</th>
+                  <th class="num">Gasto acumulado del mes</th>
+                  <th class="num">Restante acumulado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for fila in av_mes.semanas %}
+                <tr>
+                  <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
+                  <td class="num">${{ fila.gasto_semana_en_mes|floatformat:2|intcomma }}</td>
+                  <td class="num">${{ fila.gasto_acumulado|floatformat:2|intcomma }}</td>
+                  <td class="num {% if fila.restante_acumulado < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante_acumulado|floatformat:2|intcomma }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% endfor %}
+          </div>
+        </details>
+        {% endfor %}
+      {% else %}
+      <div class="vacio">Sin presupuesto mensual capturado para el filtro actual.</div>
+      {% endif %}
+    </div>
   </form>
 </main>
 
@@ -427,67 +483,114 @@ function quitarSucursal(event, id) {
   return false;
 }
 
+function crearGraficaLinea(canvasId, g) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: g.etiquetas,
+      datasets: [
+        {
+          label: 'Gasto real',
+          data: g.gasto_real,
+          borderColor: '#035953',
+          backgroundColor: '#035953',
+          borderWidth: 2,
+          pointRadius: 3,
+          tension: 0,
+        },
+        {
+          label: 'Presupuesto',
+          data: g.presupuesto,
+          borderColor: '#eb6834',
+          backgroundColor: '#eb6834',
+          borderWidth: 2,
+          pointRadius: 3,
+          tension: 0,
+        },
+        {
+          label: 'Tendencia (gasto real)',
+          data: g.tendencia,
+          borderColor: '#898781',
+          backgroundColor: '#898781',
+          borderWidth: 2,
+          borderDash: [6, 4],
+          pointRadius: 0,
+          tension: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (item) => item.dataset.label + ': $' + item.parsed.y.toLocaleString('es-MX', { minimumFractionDigits: 2 }),
+          },
+        },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: (v) => '$' + v.toLocaleString('es-MX') } },
+      },
+    },
+  });
+}
+
+// One line per sucursal (gasto real only) on a shared logarithmic axis, so
+// a low-volume branch's own trend/spikes stay visible next to a
+// high-volume branch's instead of flattening near zero on a linear scale.
+const PALETA_SUCURSALES = [
+  '#035953', '#eb6834', '#898781', '#1f77b4', '#9467bd',
+  '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#d62728',
+];
+
+function crearGraficaComparativa(canvasId, grafica) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: grafica.etiquetas,
+      datasets: grafica.series.map((s, i) => ({
+        label: s.nombre,
+        data: s.datos,
+        borderColor: PALETA_SUCURSALES[i % PALETA_SUCURSALES.length],
+        backgroundColor: PALETA_SUCURSALES[i % PALETA_SUCURSALES.length],
+        borderWidth: 2,
+        pointRadius: 2,
+        tension: 0,
+      })),
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (item) => item.dataset.label + ': $' + item.parsed.y.toLocaleString('es-MX', { minimumFractionDigits: 2 }),
+          },
+        },
+      },
+      scales: {
+        y: { type: 'logarithmic', ticks: { callback: (v) => '$' + v.toLocaleString('es-MX') } },
+      },
+    },
+  });
+}
+
+const datosGraficaGlobalEl = document.getElementById('grafica-global-data');
+if (datosGraficaGlobalEl) {
+  crearGraficaComparativa('grafica-global', JSON.parse(datosGraficaGlobalEl.textContent));
+}
+
 const datosGraficasEl = document.getElementById('graficas-data');
 if (datosGraficasEl) {
   const graficas = JSON.parse(datosGraficasEl.textContent);
-  graficas.forEach(g => {
-    const ctx = document.getElementById('grafica-' + g.sucursal_id);
-    if (!ctx) return;
-    new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: g.etiquetas,
-        datasets: [
-          {
-            label: 'Gasto real',
-            data: g.gasto_real,
-            borderColor: '#035953',
-            backgroundColor: '#035953',
-            borderWidth: 2,
-            pointRadius: 3,
-            tension: 0,
-          },
-          {
-            label: 'Presupuesto',
-            data: g.presupuesto,
-            borderColor: '#eb6834',
-            backgroundColor: '#eb6834',
-            borderWidth: 2,
-            pointRadius: 3,
-            tension: 0,
-          },
-          {
-            label: 'Tendencia (gasto real)',
-            data: g.tendencia,
-            borderColor: '#898781',
-            backgroundColor: '#898781',
-            borderWidth: 2,
-            borderDash: [6, 4],
-            pointRadius: 0,
-            tension: 0,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } },
-          tooltip: {
-            callbacks: {
-              label: (item) => item.dataset.label + ': $' + item.parsed.y.toLocaleString('es-MX', { minimumFractionDigits: 2 }),
-            },
-          },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: { callback: (v) => '$' + v.toLocaleString('es-MX') },
-          },
-        },
-      },
-    });
-  });
+  graficas.forEach(g => crearGraficaLinea('grafica-' + g.sucursal_id, g));
 }
 </script>
 </body>

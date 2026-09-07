@@ -95,15 +95,19 @@ class CategoriaProductoTipoGasto(models.Model):
 
 class Presupuesto(models.Model):
     """
+    Captured monthly (mes = first day of the calendar month), then prorated
+    across days to measure against actual spend week by week (see
+    _prorratear_por_dias / _calcular_contexto_dashboard in views.py) - a
+    week that spans two months blends both months' daily rates.
+
     tipo_gasto is optional. Leave it blank to capture "everything else" for
-    a sucursal/semana: the dashboard's by-tipo breakdown (see
-    _calcular_contexto_dashboard in views.py) spreads that amount evenly
-    across whichever TipoGasto records do NOT have their own explicit
-    Presupuesto row for that same sucursal/semana. E.g. Carne=$120,000 and
-    Oficina=$45,000 as explicit rows, plus one blank-tipo_gasto row for the
-    remaining 10 tipos - each of those 10 gets 1/10th of that row's amount.
-    The overall dashboard table just sums every Presupuesto row for a
-    sucursal/semana regardless of tipo_gasto, so it's correct either way
+    a sucursal/mes: the dashboard's by-tipo breakdown spreads that amount
+    evenly across whichever TipoGasto records do NOT have their own
+    explicit Presupuesto row for that same sucursal/mes. E.g. Carne=$120,000
+    and Oficina=$45,000 as explicit rows, plus one blank-tipo_gasto row for
+    the remaining 10 tipos - each of those 10 gets 1/10th of that row's
+    amount. The overall dashboard table just sums every Presupuesto row for
+    a sucursal/mes regardless of tipo_gasto, so it's correct either way
     without needing to know about this split.
     """
 
@@ -117,10 +121,10 @@ class Presupuesto(models.Model):
         help_text=(
             "Deja en blanco para capturar 'todo lo demas': ese monto se reparte en partes "
             "iguales entre los tipos de gasto que NO tengan su propio presupuesto capturado "
-            "para esta misma sucursal y semana."
+            "para esta misma sucursal y mes."
         ),
     )
-    semana = models.DateField(help_text="Monday of the ISO week this budget applies to.")
+    mes = models.DateField(help_text="First day of the calendar month this budget applies to (e.g. 2026-08-01).")
     monto = models.DecimalField(max_digits=12, decimal_places=2)
     creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -129,16 +133,23 @@ class Presupuesto(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["sucursal", "tipo_gasto", "semana"], name="unique_presupuesto_sucursal_tipo_semana"
+                fields=["sucursal", "tipo_gasto", "mes"], name="unique_presupuesto_sucursal_tipo_mes"
             )
         ]
-        ordering = ["-semana", "sucursal", "tipo_gasto"]
+        ordering = ["-mes", "sucursal", "tipo_gasto"]
         verbose_name = "presupuesto"
         verbose_name_plural = "presupuestos"
 
+    def save(self, *args, **kwargs):
+        # Normalize to the 1st of the month regardless of what day the
+        # admin's date picker happened to submit - every day-count/proration
+        # calculation downstream assumes `mes` is exactly month-aligned.
+        self.mes = self.mes.replace(day=1)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         tipo = self.tipo_gasto or "Total"
-        return f"{self.sucursal} / {tipo} / {self.semana} = {self.monto}"
+        return f"{self.sucursal} / {tipo} / {self.mes} = {self.monto}"
 
 
 class GastoReal(models.Model):

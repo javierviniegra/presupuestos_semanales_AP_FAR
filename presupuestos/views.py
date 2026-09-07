@@ -1,4 +1,5 @@
 import base64
+import calendar
 import io
 from datetime import date, timedelta
 from pathlib import Path
@@ -10,6 +11,7 @@ import matplotlib.pyplot as plt
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Sum
+from django.db.models.functions import TruncMonth
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -28,6 +30,13 @@ OPCIONES_SEMANAS = [4, 8, 12, 26, 52]
 OPCIONES_AGRUPAR_GENERAL = [("semana", "Semana"), ("sucursal", "Sucursal")]
 OPCIONES_AGRUPAR_TIPO = [("tipo_gasto", "Tipo de gasto"), ("semana", "Semana"), ("sucursal", "Sucursal")]
 OPCIONES_AGRUPAR_PROVEEDOR = [("proveedor", "Proveedor"), ("semana", "Semana"), ("sucursal", "Sucursal")]
+
+# One distinct color per sucursal line on the cross-branch comparison chart -
+# cycled with modulo if there are ever more sucursales than colors.
+PALETA_SUCURSALES = [
+    "#035953", "#eb6834", "#898781", "#1f77b4", "#9467bd",
+    "#8c564b", "#e377c2", "#17becf", "#bcbd22", "#d62728",
+]
 TOP_PROVEEDORES = 15
 
 
@@ -43,6 +52,193 @@ def _semanas_periodo(num_semanas):
     hoy = date.today()
     semana_actual = _lunes_de_semana(hoy)
     return [semana_actual - timedelta(weeks=i) for i in range(num_semanas)]
+
+
+def _primer_dia_mes(d):
+    return date(d.year, d.month, 1)
+
+
+def _dias_en_mes(mes):
+    return calendar.monthrange(mes.year, mes.month)[1]
+
+
+def _ultimo_dia_mes(mes):
+    return date(mes.year, mes.month, _dias_en_mes(mes))
+
+
+def _meses_para_semanas(semanas):
+    """Every calendar month touched by any day of any given week-Monday -
+    a 7-day week touches at most 2 months."""
+    meses = set()
+    for sem in semanas:
+        meses.add(_primer_dia_mes(sem))
+        meses.add(_primer_dia_mes(sem + timedelta(days=6)))
+    return sorted(meses)
+
+
+def _prorratear_por_dias(semana, valor_por_mes_fn):
+    """
+    Presupuesto is captured monthly but measured weekly: sum, across the 7
+    days of `semana`, each day's 1/days-in-that-month share of
+    valor_por_mes_fn(mes_del_dia). A week spanning two months blends both
+    months' daily rates automatically - the whole point of this function.
+    One shared primitive for both the no-tipo-breakdown total and the
+    per-tipo_gasto proration (valor_por_mes_fn just looks up a different
+    dict).
+    """
+    total = 0
+    for i in range(7):
+        mes = _primer_dia_mes(semana + timedelta(days=i))
+        valor = valor_por_mes_fn(mes)
+        # Skip the division entirely when there's no budget for this day's
+        # month - `0 / dias_en_mes` would silently promote the running
+        # Decimal total to a float (Python 3 true division), which then
+        # blows up mixing types with a later day's Decimal contribution.
+        if valor:
+            total += valor / _dias_en_mes(mes)
+    return round(total, 2)
+
+
+def _resolver_presupuestos_mensuales(sucursales, meses):
+    """
+    Mirrors Presupuesto's "everything else" spread logic (see its
+    docstring), keyed by mes instead of semana. Returns:
+      pres_general_mensual:  {(sucursal_id, mes): total} - raw sum of every
+        Presupuesto row regardless of tipo_gasto (including the blank
+        "everything else" row) - sum-invariant under the split below, so
+        the no-tipo-breakdown case never needs the split logic at all.
+      pres_resuelto_mensual: {(sucursal_id, mes, tipo_gasto_id): monto} -
+        resolved: blank-tipo_gasto rows spread evenly across whichever
+        TipoGasto records do NOT have their own explicit row that
+        sucursal/mes, plus a slice for GastoReal's "sin clasificar" bucket
+        if that sucursal/month actually has any unclassified spend.
+    The "has unclassified spend" check uses fecha_pago's calendar month
+    (via TruncMonth), not GastoReal.semana - a Monday-keyed week can
+    nominally sit in a different month than a later fecha_pago in that same
+    week, and this check needs the actual month, not the week's label.
+    """
+    if not meses:
+        return {}, {}
+
+    presupuestos = Presupuesto.objects.filter(sucursal__in=sucursales, mes__in=meses)
+
+    pres_general_mensual = {
+        (r["sucursal_id"], r["mes"]): r["total"]
+        for r in presupuestos.values("sucursal_id", "mes").annotate(total=Sum("monto"))
+    }
+    pres_por_tipo_raw = {
+        (r["sucursal_id"], r["mes"], r["tipo_gasto_id"]): r["total"]
+        for r in presupuestos.values("sucursal_id", "mes", "tipo_gasto_id").annotate(total=Sum("monto"))
+    }
+
+    todos_los_tipo_ids = list(TipoGasto.objects.values_list("id", flat=True))
+
+    sin_clasificar_meses = set(
+        GastoReal.objects.filter(
+            sucursal__in=sucursales,
+            tipo_gasto__isnull=True,
+            fecha_pago__range=(meses[0], _ultimo_dia_mes(meses[-1])),
+        )
+        .annotate(mes=TruncMonth("fecha_pago"))
+        .values_list("sucursal_id", "mes")
+        .distinct()
+    )
+
+    pres_agrupado = {}
+    for (suc_id, mes, tipo_id), monto in pres_por_tipo_raw.items():
+        pres_agrupado.setdefault((suc_id, mes), {})[tipo_id] = monto
+
+    pres_resuelto_mensual = {}
+    for (suc_id, mes), por_tipo in pres_agrupado.items():
+        especificados = {tid: monto for tid, monto in por_tipo.items() if tid is not None}
+        for tid, monto in especificados.items():
+            pres_resuelto_mensual[(suc_id, mes, tid)] = monto
+
+        remanente = por_tipo.get(None)
+        if remanente:
+            no_especificados = [tid for tid in todos_los_tipo_ids if tid not in especificados]
+            if (suc_id, mes) in sin_clasificar_meses:
+                no_especificados.append(None)
+            if no_especificados:
+                parte = round(remanente / len(no_especificados), 2)
+                for tid in no_especificados:
+                    pres_resuelto_mensual[(suc_id, mes, tid)] = pres_resuelto_mensual.get((suc_id, mes, tid), 0) + parte
+
+    return pres_general_mensual, pres_resuelto_mensual
+
+
+def _avance_mensual(sucursales, semanas, pres_general_mensual):
+    """
+    Cumulative running remainder of each month's total budget, reset at
+    month start (no rollover), shown progressively per week. Additive to -
+    not a replacement of - the per-week presupuesto/gasto_real/restante
+    tables elsewhere, which stay semana-attributed as always.
+
+    Both the budget AND the actual spend are bucketed day-precise here
+    (GastoReal.fecha_pago, NOT the week-grain `semana`), so a
+    month-spanning week splits cleanly on both sides of the comparison -
+    matching how the budget side is already prorated by calendar day. This
+    is intentionally a different cut than the per-week tables, so its
+    numbers won't reconcile 1:1 against them for a month with a
+    boundary-spanning week - that's expected, not a bug.
+
+    Returns a list, one entry per sucursal (only sucursales with at least
+    one month of data are included):
+      {"sucursal": Sucursal,
+       "meses": [{"mes": date, "presupuesto_mes": Decimal,
+                  "semanas": [{"semana": date, "gasto_semana_en_mes": Decimal,
+                               "gasto_acumulado": Decimal,
+                               "restante_acumulado": Decimal}, ...]}, ...]}
+    A week overlapping two months produces two rows (one under each mes) -
+    never merged or averaged.
+    """
+    meses = _meses_para_semanas(semanas)
+    if not meses or not sucursales:
+        return []
+
+    diario = {
+        (r["sucursal_id"], r["fecha_pago"]): r["total"]
+        for r in GastoReal.objects.filter(
+            sucursal__in=sucursales, fecha_pago__range=(meses[0], _ultimo_dia_mes(meses[-1]))
+        )
+        .values("sucursal_id", "fecha_pago")
+        .annotate(total=Sum("monto"))
+    }
+    semanas_asc = sorted(semanas)
+
+    resultado = []
+    for suc in sucursales:
+        meses_out = []
+        for mes in meses:
+            dias_mes = _dias_en_mes(mes)
+            acumulado = [0] * (dias_mes + 1)  # acumulado[0] = 0; acumulado[d] = sum of days 1..d
+            corrida = 0
+            for d in range(1, dias_mes + 1):
+                corrida += diario.get((suc.id, date(mes.year, mes.month, d))) or 0
+                acumulado[d] = corrida
+
+            presupuesto_mes = pres_general_mensual.get((suc.id, mes)) or 0
+            semanas_out = []
+            for sem in semanas_asc:
+                inicio_overlap = max(sem, mes)
+                fin_overlap = min(sem + timedelta(days=6), _ultimo_dia_mes(mes))
+                if inicio_overlap > fin_overlap:
+                    continue
+                gasto_hasta_fin = acumulado[fin_overlap.day]
+                gasto_antes_inicio = acumulado[inicio_overlap.day - 1]
+                semanas_out.append(
+                    {
+                        "semana": sem,
+                        "gasto_semana_en_mes": gasto_hasta_fin - gasto_antes_inicio,
+                        "gasto_acumulado": gasto_hasta_fin,
+                        "restante_acumulado": presupuesto_mes - gasto_hasta_fin,
+                    }
+                )
+            if semanas_out:
+                meses_out.append({"mes": mes, "presupuesto_mes": presupuesto_mes, "semanas": semanas_out})
+        if meses_out:
+            resultado.append({"sucursal": suc, "meses": meses_out})
+    return resultado
 
 
 def _obtener_facturas_pendientes(sucursales_seleccionadas, hasta):
@@ -240,6 +436,44 @@ def _grafica_png_base64(grafica):
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def _grafica_comparativa_png_base64(grafica_global):
+    """
+    One line per sucursal (gasto real / "compras" only - no presupuesto or
+    tendencia here, that would be 3x as many lines and defeat the point),
+    on a shared logarithmic y-axis so a low-volume branch's week-to-week
+    behavior stays visible next to a high-volume branch's instead of being
+    flattened near zero on a linear scale. Purpose is comparing SHAPE
+    (trend, spikes, dips) across branches, not reading exact pesos off it -
+    the per-sucursal cards below this chart have the precise linear-scale
+    numbers.
+    """
+    series = grafica_global["series"]
+    if not series:
+        return None
+
+    fig, ax = plt.subplots(figsize=(7, 3.4), dpi=150)
+    x = range(len(grafica_global["etiquetas"]))
+    for i, s in enumerate(series):
+        color = PALETA_SUCURSALES[i % len(PALETA_SUCURSALES)]
+        ax.plot(x, s["datos"], color=color, linewidth=1.8, marker="o", markersize=2.5, label=s["nombre"])
+    ax.set_yscale("log")
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(grafica_global["etiquetas"], fontsize=6, rotation=45, ha="right")
+    ax.tick_params(axis="y", labelsize=7)
+    ax.yaxis.set_major_formatter(lambda v, _: f"${v:,.0f}")
+    ax.set_title("Compras por sucursal (escala logaritmica)", fontsize=9, color="#023f3b", fontweight="bold", loc="left")
+    ax.legend(fontsize=6, loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=3, frameon=False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", color="#e1e0d9", linewidth=0.5)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    plt.close(fig)
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
 def _grafica_tipo_gasto_png_base64(sucursal_nombre, filas):
     """
     Horizontal grouped bar chart (presupuesto vs. gasto real per tipo_gasto),
@@ -302,100 +536,89 @@ def _calcular_contexto_dashboard(request):
     num_semanas = max(1, min(num_semanas, 52))
 
     semanas = _semanas_periodo(num_semanas)
+    meses = _meses_para_semanas(semanas)
 
-    presupuestos = Presupuesto.objects.filter(sucursal__in=sucursales_seleccionadas, semana__in=semanas)
     gastos = GastoReal.objects.filter(sucursal__in=sucursales_seleccionadas, semana__in=semanas)
 
-    pres_general = {
-        (r["sucursal_id"], r["semana"]): r["total"]
-        for r in presupuestos.values("sucursal_id", "semana").annotate(total=Sum("monto"))
-    }
+    pres_general_mensual, pres_resuelto_mensual = _resolver_presupuestos_mensuales(
+        sucursales_seleccionadas, meses
+    )
+    tipos_por_suc_mes = {}
+    for (suc_id, mes, tipo_id) in pres_resuelto_mensual:
+        tipos_por_suc_mes.setdefault((suc_id, mes), set()).add(tipo_id)
+
     gasto_general = {
         (r["sucursal_id"], r["semana"]): r["total"]
         for r in gastos.values("sucursal_id", "semana").annotate(total=Sum("monto"))
     }
 
-    sucursales_por_id = {s.id: s for s in sucursales_seleccionadas}
-
     filas_general = []
     for suc in sucursales_seleccionadas:
         for sem in semanas:
-            clave = (suc.id, sem)
-            presupuesto = pres_general.get(clave) or 0
-            gasto = gasto_general.get(clave) or 0
+            presupuesto = _prorratear_por_dias(
+                sem, lambda mes, sid=suc.id: pres_general_mensual.get((sid, mes))
+            )
+            gasto = gasto_general.get((suc.id, sem)) or 0
             if presupuesto or gasto:
                 filas_general.append(
                     {"sucursal": suc, "semana": sem, "presupuesto": presupuesto, "gasto_real": gasto, "restante": presupuesto - gasto}
                 )
 
-    pres_por_tipo_raw = {
-        (r["sucursal_id"], r["semana"], r["tipo_gasto_id"]): r["total"]
-        for r in presupuestos.values("sucursal_id", "semana", "tipo_gasto_id").annotate(total=Sum("monto"))
-    }
     gasto_por_tipo = {
         (r["sucursal_id"], r["semana"], r["tipo_gasto_id"]): r["total"]
         for r in gastos.values("sucursal_id", "semana", "tipo_gasto_id").annotate(total=Sum("monto"))
     }
+    gasto_tipo_ids_por_suc_sem = {}
+    for (sid, sem, tid) in gasto_por_tipo:
+        gasto_tipo_ids_por_suc_sem.setdefault((sid, sem), set()).add(tid)
 
     tipos_gasto_objs = list(TipoGasto.objects.all())
     tipos_gasto = {t.id: t.nombre for t in tipos_gasto_objs}
-    todos_los_tipo_ids = [t.id for t in tipos_gasto_objs]
 
-    # Group presupuesto by (sucursal, semana) so a blank-tipo_gasto row (the
-    # "everything else" amount) can be spread evenly across whichever
-    # tipos_gasto did NOT get an explicit amount that same sucursal/semana.
-    pres_agrupado = {}
-    for (suc_id, sem, tipo_id), monto in pres_por_tipo_raw.items():
-        pres_agrupado.setdefault((suc_id, sem), {})[tipo_id] = monto
-
-    pres_resuelto = {}
-    for (suc_id, sem), por_tipo in pres_agrupado.items():
-        especificados = {tid: monto for tid, monto in por_tipo.items() if tid is not None}
-        for tid, monto in especificados.items():
-            pres_resuelto[(suc_id, sem, tid)] = monto
-
-        remanente = por_tipo.get(None)
-        if remanente:
-            no_especificados = [tid for tid in todos_los_tipo_ids if tid not in especificados]
-            # The "sin clasificar" bucket is also part of "everything else" -
-            # give it a slice too, but only if this sucursal/semana actually
-            # has unclassified gasto real (no phantom row otherwise).
-            if (suc_id, sem, None) in gasto_por_tipo:
-                no_especificados.append(None)
-            if no_especificados:
-                parte = round(remanente / len(no_especificados), 2)
-                for tid in no_especificados:
-                    pres_resuelto[(suc_id, sem, tid)] = pres_resuelto.get((suc_id, sem, tid), 0) + parte
-
-    claves = set(pres_resuelto) | set(gasto_por_tipo)
-
+    # Presupuesto now lives per (sucursal, mes, tipo_gasto); gasto_real
+    # stays per (sucursal, semana, tipo_gasto) - a given week can touch 1-2
+    # months, so the set of tipo_gasto rows to show that week is the union
+    # of whichever tipos had a resolved monthly budget in either of those
+    # months, plus whichever tipos actually had gasto_real that week.
     filas_tipo = []
-    for suc_id, sem, tipo_id in claves:
-        suc = sucursales_por_id.get(suc_id)
-        if not suc:
-            continue
-        presupuesto = pres_resuelto.get((suc_id, sem, tipo_id)) or 0
-        gasto = gasto_por_tipo.get((suc_id, sem, tipo_id)) or 0
-        filas_tipo.append(
-            {
-                "sucursal": suc,
-                "semana": sem,
-                # tipo_id None means "sin clasificar" - unclassified GastoReal
-                # lines, which also get a slice of the blank-tipo_gasto
-                # presupuesto (see the remanente split above) when that
-                # sucursal/semana actually has any unclassified gasto.
-                "tipo_gasto_nombre": tipos_gasto.get(tipo_id, "Sin categoria (sin clasificar)"),
-                "presupuesto": presupuesto,
-                "gasto_real": gasto,
-                "restante": presupuesto - gasto,
-            }
-        )
+    for suc in sucursales_seleccionadas:
+        for sem in semanas:
+            meses_semana = {_primer_dia_mes(sem), _primer_dia_mes(sem + timedelta(days=6))}
+            tipo_ids = set()
+            for mes in meses_semana:
+                tipo_ids |= tipos_por_suc_mes.get((suc.id, mes), set())
+            tipo_ids |= gasto_tipo_ids_por_suc_sem.get((suc.id, sem), set())
+
+            for tipo_id in tipo_ids:
+                presupuesto = _prorratear_por_dias(
+                    sem, lambda mes, sid=suc.id, tid=tipo_id: pres_resuelto_mensual.get((sid, mes, tid))
+                )
+                gasto = gasto_por_tipo.get((suc.id, sem, tipo_id)) or 0
+                if presupuesto or gasto:
+                    filas_tipo.append(
+                        {
+                            "sucursal": suc,
+                            "semana": sem,
+                            # tipo_id None means "sin clasificar" - unclassified
+                            # GastoReal lines, which also get a slice of the
+                            # blank-tipo_gasto presupuesto (see
+                            # _resolver_presupuestos_mensuales) when that
+                            # sucursal/mes actually has any unclassified gasto.
+                            "tipo_gasto_nombre": tipos_gasto.get(tipo_id, "Sin categoria (sin clasificar)"),
+                            "presupuesto": presupuesto,
+                            "gasto_real": gasto,
+                            "restante": presupuesto - gasto,
+                        }
+                    )
 
     semanas_asc = list(reversed(semanas))
     graficas = []
     for suc in sucursales_seleccionadas:
         gasto_valores = [float(gasto_general.get((suc.id, s)) or 0) for s in semanas_asc]
-        presupuesto_valores = [float(pres_general.get((suc.id, s)) or 0) for s in semanas_asc]
+        presupuesto_valores = [
+            float(_prorratear_por_dias(s, lambda mes, sid=suc.id: pres_general_mensual.get((sid, mes))))
+            for s in semanas_asc
+        ]
         graficas.append(
             {
                 "sucursal_id": suc.id,
@@ -406,6 +629,19 @@ def _calcular_contexto_dashboard(request):
                 "tendencia": _tendencia_lineal(gasto_valores),
             }
         )
+
+    # Cross-branch comparison: one gasto_real ("compras") line per sucursal
+    # on a shared logarithmic axis, so a low-volume branch's own behavior
+    # (trend, spikes, dips) stays readable next to a high-volume branch's
+    # instead of flattening near zero on a linear scale. Deliberately just
+    # gasto_real (not presupuesto/tendencia too) - this is about comparing
+    # branches to each other, not reading exact figures off it.
+    grafica_global = None
+    if graficas:
+        grafica_global = {
+            "etiquetas": [f"Sem {s.isocalendar()[1]}" for s in semanas_asc],
+            "series": [{"nombre": g["sucursal_nombre"], "datos": g["gasto_real"]} for g in graficas],
+        }
 
     agrupar_general = request.GET.get("g_agrupar", "semana")
     if agrupar_general not in dict(OPCIONES_AGRUPAR_GENERAL):
@@ -429,9 +665,11 @@ def _calcular_contexto_dashboard(request):
         "opciones_agrupar_general": OPCIONES_AGRUPAR_GENERAL,
         "opciones_agrupar_tipo": OPCIONES_AGRUPAR_TIPO,
         "graficas": graficas,
+        "grafica_global": grafica_global,
         "filas_general": filas_general,
         "filas_tipo": filas_tipo,
         "semanas": semanas,
+        "avance_mensual": _avance_mensual(sucursales_seleccionadas, semanas, pres_general_mensual),
     }
 
 
@@ -451,39 +689,26 @@ def detalle_semana(request, sucursal_id, semana):
     except ValueError:
         raise Http404("Semana invalida")
 
-    presupuestos = Presupuesto.objects.filter(sucursal=suc, semana=semana_fecha)
     gastos = GastoReal.objects.filter(sucursal=suc, semana=semana_fecha)
 
     tipos_gasto_objs = list(TipoGasto.objects.all())
     tipos_gasto = {t.id: t.nombre for t in tipos_gasto_objs}
-    todos_los_tipo_ids = [t.id for t in tipos_gasto_objs]
+
+    meses_semana = sorted({_primer_dia_mes(semana_fecha), _primer_dia_mes(semana_fecha + timedelta(days=6))})
+    _, pres_resuelto_mensual = _resolver_presupuestos_mensuales([suc], meses_semana)
 
     gasto_por_tipo = {
         r["tipo_gasto_id"]: r["total"] for r in gastos.values("tipo_gasto_id").annotate(total=Sum("monto"))
     }
 
-    especificados = {}
-    remanente = None
-    for r in presupuestos.values("tipo_gasto_id").annotate(total=Sum("monto")):
-        if r["tipo_gasto_id"] is None:
-            remanente = r["total"]
-        else:
-            especificados[r["tipo_gasto_id"]] = r["total"]
+    tipo_ids = {tid for (sid, mes, tid) in pres_resuelto_mensual if sid == suc.id}
+    tipo_ids |= set(gasto_por_tipo)
 
-    pres_resuelto = dict(especificados)
-    if remanente:
-        no_especificados = [tid for tid in todos_los_tipo_ids if tid not in especificados]
-        if None in gasto_por_tipo:
-            no_especificados.append(None)
-        if no_especificados:
-            parte = round(remanente / len(no_especificados), 2)
-            for tid in no_especificados:
-                pres_resuelto[tid] = pres_resuelto.get(tid, 0) + parte
-
-    claves_tipo = set(pres_resuelto) | set(gasto_por_tipo)
     por_tipo = []
-    for tid in claves_tipo:
-        presupuesto = pres_resuelto.get(tid) or 0
+    for tid in tipo_ids:
+        presupuesto = _prorratear_por_dias(
+            semana_fecha, lambda mes, t=tid: pres_resuelto_mensual.get((suc.id, mes, t))
+        )
         gasto = gasto_por_tipo.get(tid) or 0
         por_tipo.append(
             {
@@ -656,6 +881,9 @@ def reporte_pdf(request):
     context["graficas_imagenes"] = [
         {"sucursal_nombre": g["sucursal_nombre"], "imagen": _grafica_png_base64(g)} for g in context["graficas"]
     ]
+    context["grafica_global_imagen"] = (
+        _grafica_comparativa_png_base64(context["grafica_global"]) if context["grafica_global"] else None
+    )
 
     # Anexo A always groups by sucursal (rows by semana within it), regardless
     # of the live dashboard's own "Agrupar por" toggle - a fixed shape for

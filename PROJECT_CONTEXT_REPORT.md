@@ -1,6 +1,6 @@
-# Project Context Report - Presupuestos Semanales AP (Sucursales)
+# Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-09-02
+Last regenerated: 2026-09-07
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
 Local path: `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 
@@ -13,15 +13,27 @@ stays in English even though working conversation with the user is Spanish.
 
 ## 1. What this project is
 
-Web application to control weekly branch (sucursal) budgets against actual
-spend, for Fonda Argentina's Accounts Payable team.
+Web application to control branch (sucursal) budgets against actual spend,
+for Fonda Argentina's Accounts Payable team. Budgets are captured monthly
+(changed 2026-09-07, was weekly) but measurement stays weekly, plus a new
+monthly cumulative running-balance view.
 
 ```text
 Pull paid vendor bills per branch from Odoo (one or several branches selectable).
-Administrator enters weekly budgets per branch, optionally broken down by
-  tipo de gasto (expense type) or as one lump sum ("everything else").
-Home page (dashboard): two tables, overall and by tipo de gasto, plus a
-  per-sucursal trend chart (gasto real / presupuesto / linear trend).
+Administrator enters MONTHLY budgets per branch, optionally broken down by
+  tipo de gasto (expense type) or as one lump sum ("everything else"). Each
+  month's amount is divided evenly across its days to get a daily rate,
+  then summed across a week's 7 days to measure that week - a week
+  spanning two months blends both months' daily rates.
+Home page (dashboard): two tables (overall and by tipo de gasto, still
+  weekly), a "Global" trend chart summing every selected sucursal into one
+  compras/presupuesto/tendencia line each on a LOGARITHMIC y-axis (so a
+  low-volume branch's swings stay visible next to a high-volume branch's -
+  a linear axis would flatten them), a per-sucursal trend chart below it
+  (same series, linear axis, one chart per branch), and a new "Avance
+  mensual" section: cumulative gasto and remaining monthly budget, week by
+  week, reset at the start of each month (no rollover) - negative
+  remaining is flagged in red.
 Each row links to a week-detail drill-down: KPIs, budget-vs-actual chart by
   tipo de gasto, top providers chart, full invoice list for that week.
 Cross-branch provider report: total spend by provider across every
@@ -29,7 +41,8 @@ Cross-branch provider report: total spend by provider across every
 Pending/partial invoices report: live Odoo query (not the daily sync) of
   not-yet-fully-paid bills, grouped by purchase order, using amount_residual.
 Executive PDF export: KPI summary + narrative + top-variance table + charts
-  (as static images) + detailed appendix tables. Respects current dashboard filter.
+  (as static images) + detailed appendix tables + the same "Avance
+  mensual" section. Respects current dashboard filter.
 ```
 
 Deferred to a later phase (not started): branches not on Odoo will read
@@ -65,15 +78,30 @@ Local/dev changes don't.
 The dev DB is XAMPP's MySQL, **not a Windows service** (user explicitly
 rejected making it one - see memory `feedback_mysql_dev_no_windows_service`).
 After a machine restart/reboot it must be started by hand via the XAMPP
-control panel, and it is prone to Aria-engine corruption on an unclean
-shutdown (`Cannot find checkpoint record`, `Table '.\mysql\db' is marked as
-crashed`). Fix used successfully once already: delete
+control panel.
+
+**Root cause found and fixed 2026-09-07**: the recurring "Aria-engine
+corruption on unclean shutdown" (`Cannot find checkpoint record`, `Table
+'.\mysql\db' is marked as crashed`) was never the real problem - it was a
+downstream symptom. The actual cause was `mysqld.exe` itself crashing
+(Windows Application Error, exception `0x80000003` at a fixed offset,
+`InnoDB: Assertion failure in file os0file.cc line 6132, Failing
+assertion: slot` in the error log) - a known MariaDB-on-Windows bug in the
+native async-I/O slot manager, confirmed recurring since at least
+2026-08-03. Fixed by adding `innodb_use_native_aio=0` under `[mysqld]` in
+`C:\xampp\mysql\bin\my.ini` (falls back to simulated AIO - negligible perf
+cost for local single-user dev). Verified stable under load: `CHECK TABLE`
+across every table in `presupuestos_ap`/`wansoft`/`zenput` came back OK
+with mysqld surviving the whole pass (same PID throughout). This file is
+outside the git repo, so the fix isn't tracked in version control - if
+XAMPP is ever reinstalled or `my.ini` reset, re-add that line.
+
+If Aria corruption ever recurs anyway, the old recovery steps are still
+valid and safe (don't touch InnoDB data): delete
 `C:\xampp\mysql\data\aria_log.*` + `aria_log_control`, then if a specific
 system table (e.g. `mysql\db`) is still marked crashed, repair it with
 `C:\xampp\mysql\bin\aria_chk.exe -r <path-to-table-without-extension>`
-(mysqld must not be running during the repair). Both steps are safe -
-they don't touch the actual InnoDB data in `presupuestos_ap`/`wansoft`/
-`zenput` (separate storage engine, separate files).
+(mysqld must not be running during the repair).
 
 ### Recurring dev-environment bug: stale runserver process
 
@@ -131,13 +159,30 @@ CuentaContableTipoGasto / CategoriaProductoTipoGasto
                      keyword-classified from real Odoo data by
                      scripts/classify_odoo_catalog.py (idempotent, re-run
                      anytime - never overwrites a human classification).
-Presupuesto          sucursal + tipo_gasto (nullable) + semana + monto.
-                     tipo_gasto blank = "everything else": that amount
-                     splits EVENLY across whichever tipos_gasto (and the
-                     "sin clasificar" GastoReal bucket, if that
-                     sucursal/semana has any) do NOT have their own
-                     explicit Presupuesto row for the same sucursal/semana.
-                     See _calcular_contexto_dashboard() in views.py.
+Presupuesto          sucursal + tipo_gasto (nullable) + mes (first day of
+                     the calendar month, changed 2026-09-07 - was semana/
+                     Monday) + monto. tipo_gasto blank = "everything else":
+                     that amount splits EVENLY across whichever tipos_gasto
+                     (and the "sin clasificar" GastoReal bucket, if that
+                     sucursal/mes has any) do NOT have their own explicit
+                     Presupuesto row for the same sucursal/mes. See
+                     _resolver_presupuestos_mensuales() in views.py.
+                     Measurement stays weekly: each month's monto is
+                     divided by its day count, then _prorratear_por_dias()
+                     sums a week's 7 daily shares (a week spanning two
+                     months blends both months' rates) - this is how every
+                     weekly presupuesto figure in the dashboard/PDF is
+                     derived, not a direct per-week capture anymore.
+                     Separately, _avance_mensual() tracks a cumulative
+                     running remainder of each month's total budget, reset
+                     at month start (no rollover between months), shown
+                     week by week - this one buckets actual spend by exact
+                     calendar day (GastoReal.fecha_pago), not by the
+                     week-grain `semana`, so it can split a boundary week
+                     correctly on both the budget and the actual-spend
+                     side. Its numbers are intentionally a different cut
+                     than the per-week tables and won't reconcile 1:1
+                     against them for a month with a split week.
 GastoReal             One row per Odoo vendor-bill line. Synced daily,
                      read-only, never user-edited. Key fields:
                        fecha_factura  - real invoice date, reference only
@@ -163,8 +208,11 @@ PerfilUsuario         User <-> Sucursal link, only enforced for the
                                 (Odoo-style dropdown, chips, Todas/Ninguna),
                                 2 grouped/collapsible tables (Agrupar por:
                                 semana/sucursal, +tipo_gasto for table 2),
-                                per-sucursal trend chart. Rows in table 1
-                                link to detalle_semana.
+                                per-sucursal trend chart, plus "Avance
+                                mensual del presupuesto" (cumulative
+                                monthly remaining, week by week, red when
+                                negative). Rows in table 1 link to
+                                detalle_semana.
 /dashboard/detalle/<suc>/<semana>/
                                 Week-detail: KPIs, budget-vs-actual bar
                                 chart by tipo_gasto, top-10 providers bar

@@ -121,6 +121,17 @@
 </table>
 {% endif %}
 
+{% if grafica_global_imagen %}
+<div class="salto"></div>
+<h2>Compras por sucursal (comparativo)</h2>
+<p class="subtitulo" style="margin-top: -6px;">
+  Escala logaritmica: cada linea del eje multiplica por 10 (no es un incremento fijo) -
+  asi se compara el comportamiento de una sucursal que compra poco contra una que compra
+  mucho, en la misma grafica.
+</p>
+<img class="grafica-img" src="{{ grafica_global_imagen }}">
+{% endif %}
+
 {% if graficas_imagenes %}
 <div class="salto"></div>
 <h2>Tendencia por sucursal</h2>
@@ -288,6 +299,46 @@
 </table>
 {% else %}
 <p>Sin datos para el periodo mostrado.</p>
+{% endif %}
+
+<div class="salto"></div>
+<h2>Avance mensual del presupuesto</h2>
+<p class="subtitulo" style="margin-top: -6px;">
+  Restante acumulado del presupuesto de cada mes, semana a semana, reiniciado al empezar cada mes.
+  Una semana que cruza dos meses aparece una vez bajo cada mes.
+</p>
+
+{% if avance_mensual %}
+  {% for av_suc in avance_mensual %}
+  <h3>{{ av_suc.sucursal.nombre }}</h3>
+  {% for av_mes in av_suc.meses %}
+  <p class="anexo-titulo" style="margin-top: 8px;">
+    {{ av_mes.mes|date:"F Y"|capfirst }} - Presupuesto: ${{ av_mes.presupuesto_mes|floatformat:2|intcomma }}
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Semana</th>
+        <th class="num">Gasto de la semana (en este mes)</th>
+        <th class="num">Gasto acumulado del mes</th>
+        <th class="num">Restante acumulado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fila in av_mes.semanas %}
+      <tr>
+        <td>Semana {{ fila.semana|date:"W" }} ({{ fila.semana|date:"d/m/Y" }})</td>
+        <td class="num">${{ fila.gasto_semana_en_mes|floatformat:2|intcomma }}</td>
+        <td class="num">${{ fila.gasto_acumulado|floatformat:2|intcomma }}</td>
+        <td class="num {% if fila.restante_acumulado < 0 %}restante-neg{% else %}restante-pos{% endif %}">${{ fila.restante_acumulado|floatformat:2|intcomma }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+  {% endfor %}
+{% else %}
+<p>Sin presupuesto mensual capturado para el periodo mostrado.</p>
 {% endif %}
 
 <div id="footer_content">Reporte generado automaticamente - Presupuestos AP Sucursales - Fonda Argentina</div>

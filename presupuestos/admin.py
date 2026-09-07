@@ -65,8 +65,8 @@ class CategoriaProductoTipoGastoAdmin(admin.ModelAdmin):
 
 @admin.register(Presupuesto)
 class PresupuestoAdmin(admin.ModelAdmin):
-    list_display = ["sucursal", "tipo_gasto", "semana", "monto_formateado", "creado_por"]
-    list_filter = ["sucursal", "tipo_gasto", "semana"]
+    list_display = ["sucursal", "tipo_gasto", "mes", "monto_formateado", "creado_por"]
+    list_filter = ["sucursal", "tipo_gasto", "mes"]
 
     @admin.display(description="Monto", ordering="monto")
     def monto_formateado(self, obj):
