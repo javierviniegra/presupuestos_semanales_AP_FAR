@@ -1,0 +1,260 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: letter portrait;
+    margin: 2cm 1.5cm;
+    @frame footer_frame {
+      -pdf-frame-content: footer_content;
+      bottom: 1cm; left: 1.5cm; right: 1.5cm; height: 1cm;
+    }
+  }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 9.5pt; color: #2d2d2d; }
+  h1 { color: #023f3b; font-size: 18pt; margin: 0 0 2px; }
+  h2 { color: #023f3b; font-size: 13pt; margin: 22px 0 8px; border-bottom: 1px solid #e1e0d9; padding-bottom: 4px; }
+  h3 { color: #023f3b; font-size: 11pt; margin: 14px 0 6px; }
+  .subtitulo { color: #666; font-size: 9pt; margin: 0 0 14px; }
+  p { margin: 0 0 8px; line-height: 1.4; }
+  ol, ul { margin: 4px 0 10px; padding-left: 18px; }
+  li { margin-bottom: 4px; line-height: 1.4; }
+  code, .codigo { font-family: "Courier New", monospace; background: #f0e9d8; padding: 1px 4px; border-radius: 2px; font-size: 9pt; }
+  .bloque-codigo { font-family: "Courier New", monospace; background: #f0e9d8; padding: 8px 10px; border-radius: 4px; font-size: 8.5pt; margin: 6px 0 12px; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  th { background-color: #035953; color: #ffffff; text-align: left; padding: 5px 6px; font-size: 8.5pt; }
+  td { padding: 5px 6px; font-size: 8.5pt; border-bottom: 0.5px solid #e0e0e0; vertical-align: top; }
+  .nota { font-size: 9pt; background: #f0e9d8; padding: 10px 14px; border-radius: 4px; margin: 10px 0 14px; }
+  .nota-titulo { font-weight: bold; color: #023f3b; }
+  .importante { font-size: 9pt; background: #fbeaea; border-left: 3px solid #ba2121; padding: 10px 14px; margin: 10px 0 14px; }
+  .importante-titulo { font-weight: bold; color: #ba2121; }
+  #footer_content { font-size: 7pt; color: #999; text-align: center; }
+  .logo { width: 90px; }
+  .salto { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<table style="border: none; margin-bottom: 4px;">
+  <tr style="border: none;">
+    <td style="border: none; width: 100px; padding: 0;"><img class="logo" src="{{ logo_path }}"></td>
+    <td style="border: none; padding: 0;">
+      <h1>Initial Configuration Manual</h1>
+      <p class="subtitulo">Presupuestos AP | Accounts Payable | Fonda Argentina</p>
+    </td>
+  </tr>
+</table>
+
+<p>
+This manual walks through getting the system ready to operate from scratch:
+credentials, syncing with Odoo, the expense-type catalog, and - the trickiest
+part - the mapping that decides which expense type each purchase belongs to.
+For day-to-day use (dashboard, reports), see the separate <b>User Guide</b>.
+</p>
+
+<h2>1. Prerequisites</h2>
+
+<p>Before you start, have on hand:</p>
+<ul>
+  <li>An Odoo user with read access to vendor bills
+  (<code>account.move</code>), payments (<code>account.payment</code>),
+  products, and product categories.</li>
+  <li>Credentials for the MySQL database the app will run on (dev and/or
+  production).</li>
+  <li>Python installed and access to the project folder.</li>
+</ul>
+
+<p>Copy <code>core/config/.env.example</code> to <code>core/config/.env</code>
+and fill in these variables:</p>
+
+<table>
+  <tr><th>Variable</th><th>What it's for</th></tr>
+  <tr><td>DJANGO_SECRET_KEY</td><td>Django's internal signing key. Generate a new one, never reuse one from another project.</td></tr>
+  <tr><td>DJANGO_ALLOWED_HOSTS</td><td>Domains/IPs the app can be reached from.</td></tr>
+  <tr><td>PRESUPUESTOS_DB_* (and _DEV)</td><td>Host, port, user, password, and name of the MySQL database, for production and for development.</td></tr>
+  <tr><td>ODOO_URL / ODOO_DB_NAME / ODOO_USER / ODOO_PASSWORD</td><td>XML-RPC connection to the same Odoo instance already used by the Wansoft project.</td></tr>
+</table>
+
+<div class="nota">
+<span class="nota-titulo">Note:</span> on the development machine, the Django
+server runs on port 8010 (not the default 8000), because 8000 is already
+taken by XAMPP.
+</div>
+
+<h2>2. Set up the environment</h2>
+
+<div class="bloque-codigo">python -m venv .venv<br>.venv\Scripts\activate<br>pip install -r requirements.txt<br>python manage.py migrate<br>python manage.py createsuperuser<br>python manage.py runserver 8010</div>
+
+<p>You can now log into the admin panel at
+<code>http://127.0.0.1:8010/admin/</code> with the superuser you just created.</p>
+
+<h2>3. Sync branches from Odoo</h2>
+
+<p>Every branch (sucursal) in the app maps to a company (<code>res.company</code>)
+in Odoo. This script pulls them once (and is safe to re-run later if a new
+branch is added in Odoo):</p>
+
+<div class="bloque-codigo">python scripts/sync_sucursales.py</div>
+
+<p>It creates branches that don't exist yet and renames any that changed
+their name in Odoo. It never deletes a branch, even if it disappears from
+Odoo - if a branch stops operating, it's deactivated by hand in the admin
+(<code>Sucursales</code>, the <b>Activa</b> column).</p>
+
+<h2>4. Set up expense categories and expense types</h2>
+
+<p>Before mapping anything, the internal expense-type catalog has to exist.
+This catalog is <b>independent of Odoo</b> - it's managed directly in
+<code>/admin/</code>:</p>
+
+<ol>
+  <li><b>Categorias</b> (the top-level P&amp;L bucket, e.g. "Costo de Ventas"
+  / COGS and "Gasto Operativo" / opex). Fully editable, not hardcoded.</li>
+  <li><b>Tipos de gasto</b>: each belongs to a Categoria. Examples already in
+  use at Fonda Argentina: Alimentos, Bebidas, Empaque y Limpieza,
+  Mantenimiento, Renta y Arrendamiento, Nomina y Personal, Combustibles y
+  Transporte, Servicios Publicos, Servicios Profesionales, Publicidad y
+  Marketing, Administrativo y Oficina, Otros / Sin Clasificar.</li>
+</ol>
+
+<div class="importante">
+<span class="importante-titulo">Important:</span> the automatic classifier in
+step 5 looks up Tipos de Gasto <b>by exact name</b> (see the list above). If
+a name doesn't exist yet in the catalog, that row will crash the script. Set
+up the expense types first, with those exact names, before continuing.
+</div>
+
+<div class="salto"></div>
+
+<h2>5. The account/category -&gt; expense-type mapping (the tricky part)</h2>
+
+<p>
+Every vendor-bill line in Odoo arrives through one of two different paths,
+and the system needs to know which one to classify it correctly:
+</p>
+
+<table>
+  <tr><th>Line type</th><th>How the expense type is identified</th></tr>
+  <tr>
+    <td><b>Purchase tied to a purchase order</b> (goods receipt)</td>
+    <td>The line's account is the generic clearing account "Goods Received
+    Not Invoiced" - that account name says nothing about the expense type.
+    In this case the system uses the <b>product's category</b>
+    (table <code>Categoria de producto -&gt; Tipo de gasto</code>) to figure
+    out the expense type.</td>
+  </tr>
+  <tr>
+    <td><b>Direct expense</b> (rent, maintenance, payroll, services, etc. -
+    not coming from a purchase order)</td>
+    <td>The line's own <b>account</b> already identifies the expense type
+    (table <code>Cuenta contable -&gt; Tipo de gasto</code>), no need to look
+    at any product.</td>
+  </tr>
+</table>
+
+<p>
+In other words: there are <b>two separate mapping tables</b> in the admin
+(<code>Cuentas contables -&gt; tipo de gasto</code> and
+<code>Categorias de producto -&gt; tipo de gasto</code>), and the system
+decides on its own which one to use based on whether the line carries the
+goods-received clearing account or not. You don't need to fill in both for
+the same line; each line only ever uses one.
+</p>
+
+<h3>5.1 Automatic step: run the classifier</h3>
+
+<p>This script pulls every product category and every account actually used
+on paid vendor bills from Odoo, creates the matching row in whichever
+mapping table it belongs to, and best-guesses the expense type from keywords
+in the name (e.g. a category named "Carnes" gets auto-assigned to
+"Alimentos"):</p>
+
+<div class="bloque-codigo">python scripts/classify_odoo_catalog.py</div>
+
+<p>It's safe to run more than once: it never overwrites an expense type a
+human already set by hand in the admin, it only fills in rows that are new
+or still blank. When it finishes, it prints two lists on screen: how many
+new categories/accounts it found, how many it could guess on its own, and
+the exact name of the ones it <b>couldn't classify</b> (those are left with
+a blank expense type).</p>
+
+<h3>5.2 Manual step: fill in what the classifier couldn't guess</h3>
+
+<p>Using the "unclassified" list the script printed, go into the admin and
+fill in the expense type by hand:</p>
+
+<ul>
+  <li><code>/admin/presupuestos/categoriaproductotipogasto/</code> - filter by
+  an empty Tipo de gasto, assign the right expense type to each pending
+  product category.</li>
+  <li><code>/admin/presupuestos/cuentacontabletipogasto/</code> - same thing,
+  for pending accounts.</li>
+</ul>
+
+<p>Any expense line whose account or category still has no expense type
+assigned shows up on the dashboard as <b>"Sin categoria (sin clasificar)"</b>
+- it isn't lost or dropped, it just can't be grouped yet.</p>
+
+<div class="nota">
+<span class="nota-titulo">When a new account or category shows up in
+Odoo</span> (a new provider, a new product, a new account), re-run
+<code>classify_odoo_catalog.py</code> from time to time to pick it up, and
+check the "unclassified" list to fill it in by hand if the name didn't match
+any known keyword.
+</div>
+
+<h2>6. Enter the monthly budget</h2>
+
+<p>The budget is captured <b>once a month</b> (not weekly) at
+<code>/admin/presupuestos/presupuesto/</code>, and the system splits it across
+the days of the month on its own so it can be compared week by week:</p>
+
+<ul>
+  <li><b>Sucursal</b>, <b>Mes</b> (any day inside the target month - it gets
+  normalized to the 1st) and <b>Monto</b> are required.</li>
+  <li><b>Tipo de gasto</b> is optional: leave it blank and that amount gets
+  split evenly across whichever expense types don't already have their own
+  row for that month ("everything else").</li>
+  <li>Each sucursal + tipo de gasto + mes combination can only exist once -
+  to correct an already-captured month, edit that same row.</li>
+</ul>
+
+<h2>7. Automate the daily sync</h2>
+
+<p>Actual spend (paid vendor bills) is pulled from Odoo with:</p>
+
+<div class="bloque-codigo">python scripts/scheduler.py</div>
+
+<p>It's read-only towards Odoo and only writes to <code>GastoReal</code>; it
+uses the mapping from step 5 to classify each line. It's recommended to
+schedule it once a day (early morning) via Windows Task Scheduler. Every run
+also automatically deletes any row that no longer corresponds to a paid bill
+in Odoo (for example if a payment was cancelled or reversed), so it doesn't
+need manual cleanup.</p>
+
+<h2>8. Verify everything is working</h2>
+
+<ol>
+  <li>Go to <code>/dashboard/</code>, filter by the branch you just set up
+  and a few recent weeks.</li>
+  <li>Confirm the budget shown matches what was entered in step 6 (prorated
+  by day).</li>
+  <li>Check the "Por tipo de gasto" table: if a lot of spend is landing in
+  "Sin categoria (sin clasificar)", go back to step 5.2 and finish the
+  mapping.</li>
+  <li>Generate the executive PDF report from the "Exportar PDF" button and
+  confirm the numbers add up.</li>
+</ol>
+
+<p style="margin-top: 16px; color: #666; font-size: 8.5pt;">
+For day-to-day use of the app (reading the dashboard, generating reports,
+interpreting the comparison chart and the monthly running balance) see the
+separate <b>User Guide</b> document.
+</p>
+
+<div id="footer_content">
+Presupuestos AP - Fonda Argentina | Initial Configuration Manual
+</div>
+
+</body>
+</html>

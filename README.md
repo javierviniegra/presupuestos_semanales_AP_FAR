@@ -79,5 +79,11 @@ Port 8010 is used instead of Django's default 8000 because 8000 is already taken
 
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how to enter monthly budgets,
   read the dashboard, and generate the PDF/provider/pending-invoice reports.
+- [docs/Configuration_Manual_Presupuestos_AP.pdf](docs/Configuration_Manual_Presupuestos_AP.pdf)
+  (source: [docs/configuration_manual.html](docs/configuration_manual.html)):
+  initial setup from scratch - credentials, syncing branches from Odoo, the
+  expense-type catalog, and the account/category -> expense-type mapping.
+  A Spanish version for the operations team is generated the same way but
+  kept out of the repo (English-only content policy for this repo).
 - [PROJECT_CONTEXT_REPORT.md](PROJECT_CONTEXT_REPORT.md): architecture and
   data model reference, kept up to date for session handoffs.
