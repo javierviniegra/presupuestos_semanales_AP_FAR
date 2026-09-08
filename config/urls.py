@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from presupuestos import views
+from presupuestos import views, views_catalogos
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -30,5 +30,10 @@ urlpatterns = [
     path("dashboard/pendientes/", views.facturas_pendientes, name="facturas_pendientes"),
     path("accounts/login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(next_page="home"), name="logout"),
+    # Must come before admin.site.urls below, otherwise Django tries to
+    # resolve "catalogos/" as an admin app label and 404s.
+    path("admin/catalogos/", views_catalogos.catalogos_admin, name="catalogos_admin"),
+    path("admin/catalogos/exportar/", views_catalogos.catalogos_exportar, name="catalogos_exportar"),
+    path("admin/catalogos/importar/", views_catalogos.catalogos_importar, name="catalogos_importar"),
     path("admin/", admin.site.urls),
 ]

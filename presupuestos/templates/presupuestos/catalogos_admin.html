@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+{% if messages %}
+  <ul class="messagelist">
+    {% for message in messages %}
+      <li class="{{ message.tags }}">{{ message }}</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+<div style="max-width: 720px;">
+  <h2>1. Descargar la plantilla</h2>
+  <p>
+    Trae en un solo archivo las Categorias, Tipos de gasto y ambos mapeos ya
+    capturados, mas todas las categorias de producto y cuentas contables que
+    existen en Odoo (para completar o corregir el tipo de gasto de cada una).
+  </p>
+  <a class="button" href="{% url 'catalogos_exportar' %}">Descargar plantilla (.xlsx)</a>
+
+  <h2 style="margin-top: 28px;">2. Importar la plantilla</h2>
+
+  {% if config.permitir_carga_inicial %}
+    <p style="background:#fbeaea;border-left:3px solid #ba2121;padding:10px 14px;">
+      <strong>Carga inicial activa:</strong> la proxima importacion va a
+      <strong>borrar</strong> Categorias, Tipos de gasto, Cuentas contables
+      -&gt; tipo de gasto y Categorias de producto -&gt; tipo de gasto
+      actuales, y los va a reemplazar por completo con el contenido del
+      Excel. Sucursales, Presupuestos y Gastos reales no se tocan. Despues
+      de esta carga la bandera se apaga sola y las siguientes importaciones
+      solo actualizan (no borran nada).
+    </p>
+  {% else %}
+    <p style="background:#f0e9d8;padding:10px 14px;">
+      Carga inicial ya usada: esta importacion solo <strong>actualiza</strong>
+      los catalogos (agrega lo nuevo, corrige el tipo de gasto de cada fila
+      del Excel), sin borrar nada existente. Para forzar un reemplazo
+      completo otra vez, reactiva "Permitir carga inicial" en
+      <a href="{% url 'admin:presupuestos_configuracioncatalogos_changelist' %}">Configuracion de catalogos</a>.
+    </p>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" action="{% url 'catalogos_importar' %}">
+    {% csrf_token %}
+    <p>
+      <input type="file" name="archivo" accept=".xlsx" required>
+    </p>
+    <input type="submit" class="button default" value="Importar plantilla">
+  </form>
+</div>
+{% endblock %}

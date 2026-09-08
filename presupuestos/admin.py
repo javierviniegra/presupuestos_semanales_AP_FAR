@@ -4,6 +4,7 @@ from django.contrib.humanize.templatetags.humanize import intcomma
 from .models import (
     Categoria,
     CategoriaProductoTipoGasto,
+    ConfiguracionCatalogos,
     CuentaContableTipoGasto,
     GastoReal,
     PerfilUsuario,
@@ -105,3 +106,15 @@ class GastoRealAdmin(admin.ModelAdmin):
 class PerfilUsuarioAdmin(admin.ModelAdmin):
     list_display = ["user", "sucursal"]
     list_filter = ["sucursal"]
+
+
+@admin.register(ConfiguracionCatalogos)
+class ConfiguracionCatalogosAdmin(admin.ModelAdmin):
+    list_display = ["permitir_carga_inicial", "actualizado_en"]
+    readonly_fields = ["actualizado_en"]
+
+    def has_add_permission(self, request):
+        return not ConfiguracionCatalogos.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

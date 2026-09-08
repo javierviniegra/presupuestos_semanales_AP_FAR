@@ -19,9 +19,11 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
+from presupuestos.catalogos_excel import (  # noqa: E402
+    fetch_odoo_direct_expense_accounts,
+    fetch_odoo_product_categories,
+)
 from presupuestos.models import CategoriaProductoTipoGasto, CuentaContableTipoGasto, TipoGasto  # noqa: E402
-
-from core.database.odoo import get_odoo_connection  # noqa: E402
 
 
 def normalize(text):
@@ -97,10 +99,9 @@ def classify(name, rules):
 
 def run():
     tipos = {t.nombre: t for t in TipoGasto.objects.all()}
-    uid, models_proxy, db, password = get_odoo_connection()
 
     # --- product categories ---
-    categories = models_proxy.execute_kw(db, uid, password, "product.category", "search_read", [[]], {"fields": ["id", "name"]})
+    categories = fetch_odoo_product_categories()
 
     cat_created, cat_classified, cat_unclassified = 0, 0, []
     for c in categories:
@@ -120,26 +121,7 @@ def run():
                 cat_unclassified.append(c["name"])
 
     # --- direct-expense accounts (non-GRNI) actually used on paid/in_payment bills ---
-    bill_ids = models_proxy.execute_kw(
-        db, uid, password, "account.move", "search_read",
-        [[["move_type", "=", "in_invoice"], ["payment_state", "in", ["paid", "in_payment"]]]],
-        {"fields": ["id"], "limit": 20000},
-    )
-    ids = [b["id"] for b in bill_ids]
-
-    accounts_seen = {}
-    CHUNK = 500
-    for i in range(0, len(ids), CHUNK):
-        chunk_ids = ids[i:i + CHUNK]
-        lines = models_proxy.execute_kw(
-            db, uid, password, "account.move.line", "search_read",
-            [[["move_id", "in", chunk_ids], ["display_type", "=", "product"]]],
-            {"fields": ["account_id"]},
-        )
-        for l in lines:
-            acc = l["account_id"]
-            if acc and "Goods Received" not in acc[1]:
-                accounts_seen[acc[0]] = acc[1]
+    accounts_seen = fetch_odoo_direct_expense_accounts()
 
     acc_created, acc_classified, acc_unclassified = 0, 0, []
     for acc_id, acc_name in accounts_seen.items():

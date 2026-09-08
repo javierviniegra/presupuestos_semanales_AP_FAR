@@ -1,0 +1,192 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: letter portrait;
+    margin: 2cm 1.5cm;
+    @frame footer_frame {
+      -pdf-frame-content: footer_content;
+      bottom: 1cm; left: 1.5cm; right: 1.5cm; height: 1cm;
+    }
+  }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 9.5pt; color: #2d2d2d; }
+  h1 { color: #023f3b; font-size: 18pt; margin: 0 0 2px; }
+  h2 { color: #023f3b; font-size: 13pt; margin: 22px 0 8px; border-bottom: 1px solid #e1e0d9; padding-bottom: 4px; }
+  h3 { color: #023f3b; font-size: 10.5pt; margin: 10px 0 4px; }
+  .subtitulo { color: #666; font-size: 9pt; margin: 0 0 14px; }
+  p { margin: 0 0 8px; line-height: 1.4; }
+  ol, ul { margin: 4px 0 10px; padding-left: 18px; }
+  li { margin-bottom: 4px; line-height: 1.4; }
+  code { font-family: "Courier New", monospace; background: #f0e9d8; padding: 1px 4px; border-radius: 2px; font-size: 9pt; }
+  .nota { font-size: 9pt; background: #f0e9d8; padding: 10px 14px; border-radius: 4px; margin: 8px 0 14px; }
+  .nota-titulo { font-weight: bold; color: #023f3b; }
+  .importante { font-size: 9pt; background: #fbeaea; border-left: 3px solid #ba2121; padding: 10px 14px; margin: 8px 0 14px; }
+  .importante-titulo { font-weight: bold; color: #ba2121; }
+  #footer_content { font-size: 7pt; color: #999; text-align: center; }
+  .logo { width: 90px; }
+  .salto { page-break-before: always; }
+  .captura { width: 100%; max-width: 560px; border: 1px solid #e1e0d9; border-radius: 4px; margin: 6px 0 12px; }
+</style>
+</head>
+<body>
+
+<table style="border: none; margin-bottom: 4px;">
+  <tr style="border: none;">
+    <td style="border: none; width: 100px; padding: 0;"><img class="logo" src="{{ logo_path }}"></td>
+    <td style="border: none; padding: 0;">
+      <h1>Admin Modules</h1>
+      <p class="subtitulo">Presupuestos AP | Accounts Payable | Fonda Argentina</p>
+    </td>
+  </tr>
+</table>
+
+<p>
+This guide walks through, one by one, the modules that appear under
+"PRESUPUESTOS" at <code>/admin/</code>, with real screenshots and what each
+field means. For the full expense-mapping logic and setting up from scratch,
+see the separate <b>Initial Configuration Manual</b>; this guide is the
+quick reference for "what does each screen do."
+</p>
+
+<h2>1. Sucursales (Branches)</h2>
+<p>Each branch maps to a company in Odoo (synced with
+<code>scripts/sync_sucursales.py</code>, not normally created here by
+hand). The field edited most often is <b>Activa</b>: only active branches
+show up as an option in the dashboard and PDF report filters.</p>
+<img class="captura" src="{{ shots }}/05a_sucursal_list.png">
+<p>The list lets you check/uncheck "Activa" right there and save several at
+once, without opening each one.</p>
+<img class="captura" src="{{ shots }}/05b_sucursal_add.png">
+
+<div class="salto"></div>
+
+<h2>2. Categorias (Categories)</h2>
+<p>The top level: the P&amp;L bucket each Tipo de gasto belongs to
+(typically "Costo de Ventas" / COGS and "Gasto Operativo" / opex). One
+field, Nombre; fully editable, not hardcoded.</p>
+<img class="captura" src="{{ shots }}/01a_categoria_list.png">
+<img class="captura" src="{{ shots }}/01b_categoria_add.png">
+
+<h2>3. Tipos de gasto (Expense types)</h2>
+<p>The catalog used everywhere else in the app (dashboard, reports,
+budgets). Each one belongs to a Categoria.</p>
+<img class="captura" src="{{ shots }}/02a_tipogasto_list.png">
+<ul>
+  <li><b>Nombre</b>: what shows up on the dashboard and in reports.</li>
+  <li><b>Categoria</b>: which P&amp;L bucket it belongs to.</li>
+  <li><b>Descripcion</b>: free text, reference only.</li>
+</ul>
+<img class="captura" src="{{ shots }}/02b_tipogasto_add.png">
+
+<div class="salto"></div>
+
+<h2>4. Catalogos: import / export (bulk load)</h2>
+<p>
+A dedicated screen at <code>/admin/catalogos/</code> ("Catalogos" link in
+the admin's top bar) for loading Categorias, Tipos de gasto, and both
+mapping tables all at once from Excel, instead of entering them row by row.
+This is the recommended way to do the full initial setup.
+</p>
+<img class="captura" src="{{ shots }}/09a_catalogos_admin.png">
+<ul>
+  <li><b>Descargar plantilla</b> (Download template): generates an .xlsx
+  with 4 sheets (Categorias, Tipos de gasto, Categorias de producto,
+  Cuentas contables). The first two sheets bring in whatever is already
+  captured; the last two are filled live with the product categories and
+  accounts that exist in Odoo. The "Tipo de gasto"/"Categoria" columns
+  carry an Excel dropdown that only allows names already present in the
+  matching sheet.</li>
+  <li><b>Importar plantilla</b> (Import template): uploads the edited
+  file. Behavior depends on the "Permitir carga inicial" flag (see
+  "Configuracion de catalogos" below): while it's on, the import
+  <b>deletes</b> the 4 current catalogs and replaces them completely; once
+  used, it turns itself off and further imports only <b>update</b>
+  (add/correct, never delete).</li>
+</ul>
+
+<div class="importante">
+<span class="importante-titulo">Important:</span> while the initial-load
+flag is on and Presupuestos already exist that use a current expense type,
+the import cancels itself with an error message instead of deleting data
+in use - no need to worry about accidentally losing information.
+</div>
+
+<h3>Configuracion de catalogos</h3>
+<p>A single row in <code>/admin/</code> holding the
+<b>Permitir carga inicial</b> flag. It turns itself off after a successful
+load; it's only reactivated here, by hand, when a full replacement is
+genuinely intended.</p>
+<img class="captura" src="{{ shots }}/09b_configuracioncatalogos_list.png">
+
+<div class="salto"></div>
+
+<h2>5. Cuentas contables -&gt; tipo de gasto (Accounts -&gt; expense type)</h2>
+<p>Mapping used for direct expenses (rent, maintenance, payroll,
+services...): the Odoo account itself already says which expense type it
+belongs to. Filled in automatically by running
+<code>scripts/classify_odoo_catalog.py</code> or by importing the catalog
+template (section 4); this is where you review/fix whatever was left
+unclassified.</p>
+<img class="captura" src="{{ shots }}/03a_cuenta_list.png">
+<p>The "Por tipo de gasto" filter on the right, with its blank option
+(<code>-</code>), is the fastest way to see which accounts are still
+unclassified.</p>
+<img class="captura" src="{{ shots }}/03b_cuenta_add.png">
+
+<h2>6. Categorias de producto -&gt; tipo de gasto (Product categories -&gt; expense type)</h2>
+<p>Same mechanism as above, but for purchases tied to a purchase order:
+there the account is generic ("Goods Received Not Invoiced") and the
+expense type is decided by the purchased product's category instead of by
+the account.</p>
+<img class="captura" src="{{ shots }}/04a_categoriaproducto_list.png">
+<img class="captura" src="{{ shots }}/04b_categoriaproducto_add.png">
+
+<div class="salto"></div>
+
+<h2>7. Presupuestos (Budgets)</h2>
+<p>The monthly budget capture: one row per branch, expense type (optional),
+and month.</p>
+<img class="captura" src="{{ shots }}/06a_presupuesto_list.png">
+<ul>
+  <li><b>Sucursal</b>, <b>Mes</b>, and <b>Monto</b> are required.</li>
+  <li><b>Tipo gasto</b> left blank = "everything else": that amount is
+  split evenly across whichever expense types don't already have their own
+  row for that same month.</li>
+  <li>Mes can be any day inside the target month: it's normalized to the
+  1st on save.</li>
+</ul>
+<img class="captura" src="{{ shots }}/06b_presupuesto_add.png">
+
+<h2>8. Gastos reales (Actual spend)</h2>
+<p>Read-only: synced automatically from Odoo
+(<code>scripts/scheduler.py</code>, twice a day via Windows Task
+Scheduler) and never edited here.
+Useful for reviewing the line-by-line detail of what's already been
+classified, and for filtering by branch, expense type, or week.</p>
+<img class="captura" src="{{ shots }}/07a_gastoreal_list.png">
+
+<div class="salto"></div>
+
+<h2>9. Perfiles de usuario (User profiles)</h2>
+<p>Extends a Django user with their assigned branch. The role (what they
+can see) comes from Django Groups (Administrador, Usuario, Sucursal); the
+branch here only applies - and is only enforced - for users in the
+Sucursal group.</p>
+<img class="captura" src="{{ shots }}/08a_perfilusuario_list.png">
+<img class="captura" src="{{ shots }}/08b_perfilusuario_add.png">
+
+<p style="margin-top: 16px; color: #666; font-size: 8.5pt;">
+For the full setup from scratch (environment variables, syncing branches,
+the recommended order for these steps) see the
+<b>Initial Configuration Manual</b>. For day-to-day dashboard and report
+use, see the <b>User Guide</b>.
+</p>
+
+<div id="footer_content">
+Presupuestos AP - Fonda Argentina | Admin modules
+</div>
+
+</body>
+</html>

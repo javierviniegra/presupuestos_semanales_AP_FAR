@@ -24,6 +24,7 @@
 
 {% block userlinks %}
     <a href="{% url 'dashboard' %}">Dashboard</a> /
+    <a href="{% url 'catalogos_admin' %}">Catalogos</a> /
     {% if site_url %}
         <a href="{{ site_url }}">{% translate 'View site' %}</a> /
     {% endif %}

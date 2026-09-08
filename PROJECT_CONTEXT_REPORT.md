@@ -1,6 +1,6 @@
 # Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-09-07
+Last regenerated: 2026-09-08
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
 Local path: `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 
@@ -103,6 +103,35 @@ system table (e.g. `mysql\db`) is still marked crashed, repair it with
 `C:\xampp\mysql\bin\aria_chk.exe -r <path-to-table-without-extension>`
 (mysqld must not be running during the repair).
 
+### Windows Task Scheduler: GastoReal sync + catalog classifier (set up 2026-09-08)
+
+Three scheduled tasks now exist on this machine, prefix `ControlPresupuestos_AP -`:
+
+```text
+Gastos reales AM      Daily, 5:00am   -> scripts/scheduler.py
+Gastos reales PM      Daily, 2:00pm   -> scripts/scheduler.py (twice a day, per user request)
+Catalogos mensual     Day 1/month,    -> scripts/run_classify_odoo_catalog.bat, which cd's
+                      4:00am             into the project root and runs
+                                         scripts/classify_odoo_catalog.py, output appended
+                                         to logs/classify_odoo_catalog.log (schtasks' /TR has
+                                         a 261-char limit - a full absolute command line for
+                                         this one exceeded it, hence the .bat wrapper; the two
+                                         scheduler.py tasks were short enough to register
+                                         directly via Register-ScheduledTask with -Argument).
+```
+
+Created via `Register-ScheduledTask` (the two daily ones) and `schtasks
+/Create` (the monthly one, via the .bat wrapper). All three only fire while
+this Windows user session is logged in (no stored credentials, not a
+service) and need XAMPP MySQL already running - same constraint as every
+other use of the app here. Verify with
+`Get-ScheduledTask | Where-Object { $_.TaskName -like "ControlPresupuestos_AP*" }`.
+
+Before this, GastoReal sync was **only run manually** despite being
+documented as "recommended daily" - confirmed via `Get-ScheduledTask` (no
+matching task existed) and the DB itself (last `sincronizado_en` was
+2026-09-02, 6 days stale, with 1,806/53,322 GastoReal rows unclassified).
+
 ### Recurring dev-environment bug: stale runserver process
 
 Multiple times this session, editing a template/view and reloading the
@@ -159,6 +188,27 @@ CuentaContableTipoGasto / CategoriaProductoTipoGasto
                      keyword-classified from real Odoo data by
                      scripts/classify_odoo_catalog.py (idempotent, re-run
                      anytime - never overwrites a human classification).
+                     Added 2026-09-08: /admin/catalogos/ (link in the admin
+                     top bar) bulk-loads all 4 catalog tables from one
+                     Excel file (4 related sheets, Excel dropdowns
+                     enforcing valid Categoria/Tipo de gasto names) - see
+                     presupuestos/catalogos_excel.py. Governed by
+                     ConfiguracionCatalogos.permitir_carga_inicial: while
+                     True, import WIPES Categoria/TipoGasto/both mapping
+                     tables and reloads from the file, then flips itself to
+                     False; while False, import only upserts (never
+                     deletes). Sucursal/Presupuesto/GastoReal are never
+                     touched by this wipe. Presupuesto.tipo_gasto is
+                     on_delete=PROTECT, so a wipe attempt raises
+                     ProtectedError (caught, shown as a friendly message,
+                     nothing lost) if any Presupuesto already references a
+                     current TipoGasto - verified live in this dev DB.
+                     GastoReal.tipo_gasto is on_delete=SET_NULL though (not
+                     protected) - a successful wipe wipes NEW TipoGasto
+                     rows into existence with new PKs, so any GastoReal
+                     already classified under the old rows goes back to
+                     "sin clasificar" until the next scheduler.py run
+                     re-resolves it from the rebuilt mapping tables.
 Presupuesto          sucursal + tipo_gasto (nullable) + mes (first day of
                      the calendar month, changed 2026-09-07 - was semana/
                      Monday) + monto. tipo_gasto blank = "everything else":
@@ -364,8 +414,6 @@ Paso 3: not started - candidates below.
 - Production deployment to 187.251.203.223 (not started).
 - SharePoint/Excel integration for non-Odoo branches (deferred phase,
   no details yet).
-- Should scheduler.py actually be scheduled (Windows Task Scheduler,
-  ~5am) now that it's been manually re-run several times this session?
 - User-role testing: Administrador/Usuario/Sucursal groups exist and are
   enforced in code, but never tested end-to-end with a real
   Sucursal-restricted user account.

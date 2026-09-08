@@ -247,3 +247,37 @@ class PerfilUsuario(models.Model):
 
     def __str__(self):
         return f"Perfil de {self.user}"
+
+
+class ConfiguracionCatalogos(models.Model):
+    """
+    Singleton (always pk=1) controlling the Excel catalog import at
+    /admin/catalogos/. See presupuestos/catalogos_excel.py for how the
+    flag is used: while True, an import wipes and replaces Categoria,
+    TipoGasto, and both mapping tables from the uploaded file, then turns
+    itself off. While False, an import only upserts (never deletes).
+    """
+
+    permitir_carga_inicial = models.BooleanField(
+        default=True,
+        help_text=(
+            "Si esta activo, la proxima importacion de la plantilla de catalogos "
+            "borra Categorias, Tipos de gasto, Cuentas contables -> tipo de gasto y "
+            "Categorias de producto -> tipo de gasto, y los reemplaza por completo "
+            "con el contenido del Excel. Se apaga solo despues de una carga exitosa; "
+            "solo se reactiva aqui, a mano."
+        ),
+    )
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "configuracion de catalogos"
+        verbose_name_plural = "configuracion de catalogos"
+
+    def __str__(self):
+        return "Configuracion de catalogos"
+
+    @classmethod
+    def obtener(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

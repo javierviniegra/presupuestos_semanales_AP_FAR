@@ -219,18 +219,32 @@ the days of the month on its own so it can be compared week by week:</p>
   to correct an already-captured month, edit that same row.</li>
 </ul>
 
-<h2>7. Automate the daily sync</h2>
+<h2>7. Automatic sync (Windows Task Scheduler)</h2>
 
-<p>Actual spend (paid vendor bills) is pulled from Odoo with:</p>
+<p>Actual spend (paid vendor bills) is pulled from Odoo with
+<code>python scripts/scheduler.py</code>: it's read-only towards Odoo and
+only writes to <code>GastoReal</code>, using the mapping from step 5 to
+classify each line. Every run also automatically deletes any row that no
+longer corresponds to a paid bill in Odoo (for example if a payment was
+cancelled or reversed), so it doesn't need manual cleanup.</p>
 
-<div class="bloque-codigo">python scripts/scheduler.py</div>
+<p>On the development machine this is already scheduled in Windows Task
+Scheduler, three tasks under the <code>ControlPresupuestos_AP -</code>
+prefix:</p>
 
-<p>It's read-only towards Odoo and only writes to <code>GastoReal</code>; it
-uses the mapping from step 5 to classify each line. It's recommended to
-schedule it once a day (early morning) via Windows Task Scheduler. Every run
-also automatically deletes any row that no longer corresponds to a paid bill
-in Odoo (for example if a payment was cancelled or reversed), so it doesn't
-need manual cleanup.</p>
+<table>
+  <tr><th>Task</th><th>When</th><th>What it runs</th></tr>
+  <tr><td>Gastos reales AM</td><td>Daily, 5:00 am</td><td><code>scripts/scheduler.py</code></td></tr>
+  <tr><td>Gastos reales PM</td><td>Daily, 2:00 pm</td><td><code>scripts/scheduler.py</code> again (twice a day)</td></tr>
+  <tr><td>Catalogos mensual</td><td>Day 1 of each month, 4:00 am</td><td><code>scripts/classify_odoo_catalog.py</code> (via <code>scripts/run_classify_odoo_catalog.bat</code>); output goes to <code>logs/classify_odoo_catalog.log</code></td></tr>
+</table>
+
+<div class="nota">
+<span class="nota-titulo">Note:</span> these tasks only run while the
+user's Windows session is logged in (they don't run as a service) and
+require XAMPP's MySQL to be up at that time - same as any other use of the
+app on this development machine.
+</div>
 
 <h2>8. Verify everything is working</h2>
 
