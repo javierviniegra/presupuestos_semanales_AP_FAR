@@ -455,16 +455,20 @@ Paso 3: not started - candidates below.
 - Multi-payment bill week-splitting (Section 5) - still fine as a
   simplification, or worth the complexity now that tax/date bugs are fixed?
 - Production deployment: DONE and confirmed live 2026-09-09 - see
-  Section 2's database entry. Two things intentionally left undecided,
-  ask before doing either:
-  - Reboot survival: Waitress currently runs as a plain background
-    process (deploy/update.ps1) - a VM restart won't bring it back on its
-    own. Fix is either a Task Scheduler "At startup" trigger running
-    deploy/update.ps1, or wrapping Waitress as a real Windows Service
-    (e.g. NSSM) for crash-restart too, not just reboot.
-  - Whether prod should run its own Odoo sync schedule
-    (PRODUCTION_SETUP.md step 8, same 3 tasks as dev) or rely on dev's
-    schedule already feeding the same production database.
+  Section 2's database entry. Both follow-ups also resolved same day:
+  - Reboot survival: added a 4th Scheduled Task on the app VM,
+    "ControlPresupuestos_AP - Arranque automatico", trigger=AtStartup,
+    runs as SYSTEM (not the interactive user, so it fires without anyone
+    logged in), action = `powershell.exe -NoProfile -ExecutionPolicy
+    Bypass -File deploy\update.ps1`. Still doesn't restart Waitress if it
+    merely crashes without a reboot (would need NSSM or similar for that)
+    - not done, not asked for.
+  - Odoo sync: prod runs its own full 3-task schedule too (same as dev -
+    Gastos reales AM 5am/PM 2pm, Catalogos mensual day 1 4am), per
+    explicit user decision, even though both machines write to the SAME
+    production database. Deliberate/known redundancy (each sync is an
+    idempotent upsert, so double-running is harmless) - user chose
+    autonomy over de-duplication.
 - SharePoint/Excel integration for non-Odoo branches (deferred phase,
   no details yet).
 - User-role testing: Administrador/Usuario/Sucursal groups exist and are
