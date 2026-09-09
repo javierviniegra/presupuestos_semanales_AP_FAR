@@ -42,9 +42,13 @@ Excel export: openpyxl
 ## Environments
 
 ```text
-Dev: local machine, test MySQL database.
-Prod: deployed at http://187.251.203.223/, real MySQL database, deployed via
-      GitHub pull (same pattern as Chatbot_FAR).
+Dev: local machine, test MySQL database, `manage.py runserver 8010`.
+Prod: Windows VM at 187.251.203.223 (also runs XAMPP and a couple of
+      standalone Python/Gradio apps). Served by Waitress on its own port,
+      no IIS/nginx in front; WhiteNoise serves static files directly.
+      Updated by pulling from GitHub and running `deploy\update.ps1` -
+      see [deploy/PRODUCTION_SETUP.md](deploy/PRODUCTION_SETUP.md) for the
+      one-time setup and the update script.
 ```
 
 Only actions that touch the production server or the production database
@@ -85,5 +89,12 @@ Port 8010 is used instead of Django's default 8000 because 8000 is already taken
   expense-type catalog, and the account/category -> expense-type mapping.
   A Spanish version for the operations team is generated the same way but
   kept out of the repo (English-only content policy for this repo).
+- [docs/Admin_Modules_Manual_Presupuestos_AP.pdf](docs/Admin_Modules_Manual_Presupuestos_AP.pdf)
+  (source: [docs/admin_modules_manual.html](docs/admin_modules_manual.html)):
+  a screenshot-by-screenshot walkthrough of every module under
+  `/admin/`. Same Spanish-version-kept-local pattern as above.
+- [deploy/PRODUCTION_SETUP.md](deploy/PRODUCTION_SETUP.md): one-time
+  production setup and the [update.ps1](deploy/update.ps1) script used for
+  every deploy after that.
 - [PROJECT_CONTEXT_REPORT.md](PROJECT_CONTEXT_REPORT.md): architecture and
   data model reference, kept up to date for session handoffs.

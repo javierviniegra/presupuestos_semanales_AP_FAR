@@ -5,3 +5,7 @@ python-dotenv>=1.2.3
 openpyxl>=3.1.5
 xhtml2pdf>=0.2.17
 matplotlib>=3.11.1
+# Production server (see deploy/PRODUCTION_SETUP.md): waitress is the WSGI
+# server, whitenoise serves static files directly so no IIS/nginx is needed.
+waitress>=3.0.2
+whitenoise>=6.11.0

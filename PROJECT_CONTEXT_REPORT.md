@@ -57,7 +57,39 @@ Frontend:     Django server-side templates + Chart.js 4.5.1 (interactive)
               + matplotlib (Agg backend, static PNGs embedded in the PDF)
 Database:     MySQL/MariaDB via mysqlclient. Dev = XAMPP MySQL on THIS PC
               (localhost:3306, NOT a remote host - unlike Wansoft's pattern).
-              Prod = 187.251.203.223 (not yet deployed there).
+              Prod = TWO separate machines (clarified 2026-09-09, see
+              deploy/PRODUCTION_SETUP.md):
+                - App VM "SVR-HIKCENTER", internal IP 192.168.100.93,
+                  Windows 11. Runs this app via Waitress+WhiteNoise (no
+                  IIS/nginx), its own port (8020 by default).
+                - Proxy/DB server 187.251.203.223: MySQL (this app's prod
+                  DB lives here, db=presupuestos_ap, user=presupuestosusers)
+                  AND an Apache reverse proxy on port 8088 that maps
+                  URL paths to internal apps (already has /mba/, /tba/ for
+                  other Gradio apps) - this app is added as
+                  /presupuestos_ap/ -> http://192.168.100.93:8020/.
+                  End users hit http://187.251.203.223:8088/presupuestos_ap/,
+                  never the app VM directly.
+              Needs DJANGO_FORCE_SCRIPT_NAME=/presupuestos_ap (new setting,
+              config/settings.py) so Django's own generated links (static
+              files via WhiteNoise, admin, login redirect) come out
+              correctly prefixed for the proxy - Apache strips the prefix
+              on the way in (ProxyPass, matching the existing /mba//tba/
+              pattern), FORCE_SCRIPT_NAME adds it back on the way out.
+              WhiteNoise's STATIC_URL handling auto-un-prefixes its own
+              incoming-request matching to agree with this (verified by
+              reading whitenoise/middleware.py, not just assumed). Verified
+              end-to-end locally (Waitress, DJANGO_FORCE_SCRIPT_NAME set):
+              static files load, generated hrefs are single-prefixed, an
+              unauthenticated /dashboard/ redirects to a correctly
+              single-prefixed /presupuestos_ap/accounts/login/. Deploy
+              tooling ready (Waitress+WhiteNoise, deploy/update.ps1) and
+              partially executed on the app VM as of 2026-09-09 (Python/Git
+              installed, repo cloned to C:\Apps\ControlPresupuestos_AP,
+              venv+deps installed, .env configured) - Apache proxy block on
+              187.251.203.223 and first launch still pending. No remote
+              access to either machine from this session; the user runs
+              deploy/PRODUCTION_SETUP.md by hand, step by step.
 PDF export:   xhtml2pdf (pure Python, no system deps - WeasyPrint needs
               GTK3, painful on Windows)
 Odoo:         XML-RPC, same instance/credentials as the Wansoft project
@@ -68,9 +100,10 @@ Numbers:      django.contrib.humanize (intcomma) everywhere - dashboard,
 ### Dev/prod boundary (confirmed once)
 
 ```text
-Dev = this PC (XAMPP MySQL, localhost:3306). Prod = 187.251.203.223.
-Only deploy/push actions to the real server need confirmation each time.
-Local/dev changes don't.
+Dev = this PC (XAMPP MySQL, localhost:3306). Prod = app VM
+192.168.100.93 (SVR-HIKCENTER) + proxy/DB server 187.251.203.223 - see
+Section 2's database entry for the split. Only deploy/push actions to the
+real server need confirmation each time. Local/dev changes don't.
 ```
 
 ### Known environment quirk: XAMPP MySQL needs manual start
@@ -411,7 +444,16 @@ Paso 3: not started - candidates below.
   or leave as a documented gap?
 - Multi-payment bill week-splitting (Section 5) - still fine as a
   simplification, or worth the complexity now that tax/date bugs are fixed?
-- Production deployment to 187.251.203.223 (not started).
+- Production deployment: in progress as of 2026-09-09, walking through
+  deploy/PRODUCTION_SETUP.md step by step with the user (no remote access
+  to either machine from this session). Done: Python/Git installed on the
+  app VM, repo cloned, venv+deps installed, .env configured (including
+  DJANGO_FORCE_SCRIPT_NAME). Still pending: adding the Apache proxy block
+  on 187.251.203.223 (step 5 of that doc), first launch via
+  deploy/update.ps1, and confirming end-to-end through the real proxy URL
+  (http://187.251.203.223:8088/presupuestos_ap/) rather than just the
+  local Waitress test done in dev. Also undecided: whether prod should run
+  its own Odoo sync schedule (PRODUCTION_SETUP.md step 8) or share dev's.
 - SharePoint/Excel integration for non-Odoo branches (deferred phase,
   no details yet).
 - User-role testing: Administrador/Usuario/Sucursal groups exist and are

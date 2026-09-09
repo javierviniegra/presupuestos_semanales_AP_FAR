@@ -30,6 +30,14 @@ DEBUG = os.getenv("DJANGO_DEBUG", "true" if ENV == "dev" else "false").lower() =
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
 
+# Set only when this app is reverse-proxied under a URL prefix (e.g. Apache
+# mapping http://host:8088/presupuestos_ap/ -> this app's root) - makes
+# every URL Django generates itself (reverse(), {% url %}, {% static %},
+# admin, login redirects) come out with that prefix already on it, so they
+# still resolve correctly through the proxy. Leave unset for a root-mounted
+# deploy (dev, or a dedicated port/vhost with no path prefix).
+FORCE_SCRIPT_NAME = os.getenv("DJANGO_FORCE_SCRIPT_NAME") or None
+
 
 # Application definition
 
@@ -46,6 +54,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static files directly from the WSGI app - lets
+    # production run on Waitress alone, no IIS/nginx needed in front.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -126,8 +137,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = f"{FORCE_SCRIPT_NAME or ''}/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
