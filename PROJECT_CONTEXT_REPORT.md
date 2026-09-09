@@ -1,6 +1,6 @@
 # Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-09-08
+Last regenerated: 2026-09-09
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
 Local path: `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 
@@ -83,13 +83,23 @@ Database:     MySQL/MariaDB via mysqlclient. Dev = XAMPP MySQL on THIS PC
               static files load, generated hrefs are single-prefixed, an
               unauthenticated /dashboard/ redirects to a correctly
               single-prefixed /presupuestos_ap/accounts/login/. Deploy
-              tooling ready (Waitress+WhiteNoise, deploy/update.ps1) and
-              partially executed on the app VM as of 2026-09-09 (Python/Git
-              installed, repo cloned to C:\Apps\ControlPresupuestos_AP,
-              venv+deps installed, .env configured) - Apache proxy block on
-              187.251.203.223 and first launch still pending. No remote
-              access to either machine from this session; the user runs
-              deploy/PRODUCTION_SETUP.md by hand, step by step.
+              tooling ready (Waitress+WhiteNoise, deploy/update.ps1).
+              **LIVE as of 2026-09-09**: full production deployment done
+              and confirmed working end-to-end through the real proxy URL
+              (http://187.251.203.223:8088/presupuestos_ap/) - app VM set
+              up (Python/Git installed, repo cloned to
+              C:\Apps\ControlPresupuestos_AP, venv+deps, .env configured,
+              migrate/createsuperuser/collectstatic run against the prod
+              DB, deploy/update.ps1 started Waitress on port 8020), Apache
+              proxy block added on 187.251.203.223 and Apache restarted,
+              admin login confirmed working through the proxy (new users
+              created there too). No remote access to either machine from
+              this session throughout - the user ran every step by hand
+              from deploy/PRODUCTION_SETUP.md, guided step by step.
+              Not yet decided (see Section 10): reboot survival (Waitress
+              currently just a background process - see that doc's "Known
+              limitation" section) and whether prod runs its own Odoo sync
+              schedule.
 PDF export:   xhtml2pdf (pure Python, no system deps - WeasyPrint needs
               GTK3, painful on Windows)
 Odoo:         XML-RPC, same instance/credentials as the Wansoft project
@@ -444,16 +454,17 @@ Paso 3: not started - candidates below.
   or leave as a documented gap?
 - Multi-payment bill week-splitting (Section 5) - still fine as a
   simplification, or worth the complexity now that tax/date bugs are fixed?
-- Production deployment: in progress as of 2026-09-09, walking through
-  deploy/PRODUCTION_SETUP.md step by step with the user (no remote access
-  to either machine from this session). Done: Python/Git installed on the
-  app VM, repo cloned, venv+deps installed, .env configured (including
-  DJANGO_FORCE_SCRIPT_NAME). Still pending: adding the Apache proxy block
-  on 187.251.203.223 (step 5 of that doc), first launch via
-  deploy/update.ps1, and confirming end-to-end through the real proxy URL
-  (http://187.251.203.223:8088/presupuestos_ap/) rather than just the
-  local Waitress test done in dev. Also undecided: whether prod should run
-  its own Odoo sync schedule (PRODUCTION_SETUP.md step 8) or share dev's.
+- Production deployment: DONE and confirmed live 2026-09-09 - see
+  Section 2's database entry. Two things intentionally left undecided,
+  ask before doing either:
+  - Reboot survival: Waitress currently runs as a plain background
+    process (deploy/update.ps1) - a VM restart won't bring it back on its
+    own. Fix is either a Task Scheduler "At startup" trigger running
+    deploy/update.ps1, or wrapping Waitress as a real Windows Service
+    (e.g. NSSM) for crash-restart too, not just reboot.
+  - Whether prod should run its own Odoo sync schedule
+    (PRODUCTION_SETUP.md step 8, same 3 tasks as dev) or rely on dev's
+    schedule already feeding the same production database.
 - SharePoint/Excel integration for non-Odoo branches (deferred phase,
   no details yet).
 - User-role testing: Administrador/Usuario/Sucursal groups exist and are
