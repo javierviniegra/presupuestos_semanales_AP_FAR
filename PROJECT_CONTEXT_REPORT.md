@@ -1,6 +1,6 @@
 # Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-09-09
+Last regenerated: 2026-09-10
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
 Local path: `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 
@@ -493,6 +493,38 @@ noticed yet. Fixed same day:
   `python scripts\sync_sucursales.py` by hand once on the prod app VM to
   populate Sucursal rows right away, rather than waiting for the next
   scheduled/deploy run.
+- Also 2026-09-10, same conversation: **also check whether catalogs were
+  ever classified in prod** - `classify_odoo_catalog.py` has the exact
+  same gap as sucursales did (only a monthly Scheduled Task, first fire
+  2026-10-01, nothing run at deploy time). If `CuentaContableTipoGasto`/
+  `CategoriaProductoTipoGasto` are near-empty in prod, run it by hand once
+  there too, same rationale as sync_sucursales - otherwise weeks of
+  GastoReal sync in the meantime lands as "Sin clasificar".
+
+**New business rule 2026-09-10**: `GASTOREAL_SYNC_DESDE = 2026-01-01`
+(`presupuestos/models.py`) - the app only actively syncs/manages
+`GastoReal` from this date forward. User's own words: "solo necesitamos
+presupuestos del ultimo año... dejalos [los de antes] como historial."
+Dev's DB has 53,445 GastoReal rows spanning 2024-02-19 to present,
+**25,301 of them before the cutoff** - verified these are NEVER touched by
+either mechanism below (tested via a rolled-back transaction against the
+real dev data before shipping this).
+- `scripts/scheduler.py`: skips writing any line whose `fecha_pago` is
+  before the cutoff (new `skipped_pre_cutoff` counter in its log line),
+  and its stale-cleanup delete is scoped to `fecha_pago__gte` cutoff too -
+  a pre-cutoff row can never be touched or deleted by a scheduler run,
+  no matter how long ago it was last synced.
+- `presupuestos/catalogos_excel.py`'s `aplicar_plantilla(borrar_todo=True)`
+  (the destructive "carga inicial" catalog reload) now ALSO deletes
+  GastoReal within that same window (not before it) - user's explicit
+  ask: after a full catalog reload, existing GastoReal was classified
+  under the OLD mapping and would sit wrong until the next scheduler run
+  happened to overwrite it; wiping the window forces a clean
+  reclassification on the very next run instead. This does NOT touch
+  pre-cutoff history, deliberately reconciling this request with the
+  "keep old data as historial" decision made in the same conversation -
+  flagged the conflict to the user before implementing, they didn't
+  object to the resolution.
 - SharePoint/Excel integration for non-Odoo branches (deferred phase,
   no details yet).
 - User-role testing: Administrador/Usuario/Sucursal groups exist and are

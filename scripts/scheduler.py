@@ -4,12 +4,15 @@
 # Meant to run once a day (~5am) via Windows Task Scheduler. Read-only on
 # the Odoo side; writes only to GastoReal.
 #
-# Reconciliation: every line currently paid/in_payment in Odoo is
-# upserted (touches sincronizado_en via auto_now). Afterward, any
-# GastoReal row NOT touched in this run - because its invoice was
-# cancelled, its payment was reverted, or the line no longer exists - is
-# deleted. This is how cancelled/un-paid invoices get removed automatically,
-# without a separate cancellation-handling path.
+# Reconciliation: every line currently paid/in_payment in Odoo with
+# fecha_pago >= GASTOREAL_SYNC_DESDE (models.py) is upserted (touches
+# sincronizado_en via auto_now). Afterward, any GastoReal row in that same
+# window NOT touched in this run - because its invoice was cancelled, its
+# payment was reverted, or the line no longer exists - is deleted. This is
+# how cancelled/un-paid invoices get removed automatically, without a
+# separate cancellation-handling path. Anything with fecha_pago before the
+# cutoff is never touched either way - deliberately kept as untouched
+# historical record (business decision 2026-09-10).
 #
 # semana is based on fecha_pago (real payment date via account.payment,
 # through account.move.reconciled_payment_ids), not the invoice date -
@@ -52,6 +55,7 @@ if not logger.handlers:
     logger.propagate = False
 
 from presupuestos.models import (  # noqa: E402
+    GASTOREAL_SYNC_DESDE,
     CategoriaProductoTipoGasto,
     CuentaContableTipoGasto,
     GastoReal,
@@ -138,7 +142,7 @@ def run():
     account_map = {m.odoo_account_id: m.tipo_gasto_id for m in CuentaContableTipoGasto.objects.all()}
     category_map = {m.odoo_category_id: m.tipo_gasto_id for m in CategoriaProductoTipoGasto.objects.all()}
 
-    created, updated, skipped_no_sucursal, skipped_no_date = 0, 0, 0, 0
+    created, updated, skipped_no_sucursal, skipped_no_date, skipped_pre_cutoff = 0, 0, 0, 0, 0
 
     for line in all_lines:
         bill = bill_by_id[line["move_id"][0]]
@@ -153,6 +157,15 @@ def run():
             continue
         fecha_factura = datetime.date.fromisoformat(bill["invoice_date"])
         fecha_pago = datetime.date.fromisoformat(bill["fecha_pago"]) if bill["fecha_pago"] else fecha_factura
+
+        if fecha_pago < GASTOREAL_SYNC_DESDE:
+            # Older than the managed window (see GASTOREAL_SYNC_DESDE's
+            # docstring in models.py) - deliberately left alone, not
+            # created/updated, and excluded from the stale-cleanup query
+            # below too.
+            skipped_pre_cutoff += 1
+            continue
+
         semana = iso_week_monday(fecha_pago)
 
         tipo_gasto_id = resolve_tipo_gasto(
@@ -180,15 +193,20 @@ def run():
         else:
             updated += 1
 
-    stale = GastoReal.objects.filter(sincronizado_en__lt=sync_started_at)
+    # Scoped to the same managed window as above - never touches anything
+    # with fecha_pago < GASTOREAL_SYNC_DESDE, no matter how old its
+    # sincronizado_en is.
+    stale = GastoReal.objects.filter(
+        sincronizado_en__lt=sync_started_at, fecha_pago__gte=GASTOREAL_SYNC_DESDE
+    )
     deleted_count = stale.count()
     stale.delete()
 
     logger.info(
         "bills=%s lines=%s created=%s updated=%s deleted_stale=%s "
-        "skipped_no_sucursal=%s skipped_no_date=%s",
+        "skipped_no_sucursal=%s skipped_no_date=%s skipped_pre_cutoff=%s",
         len(bills), len(all_lines), created, updated, deleted_count,
-        skipped_no_sucursal, skipped_no_date,
+        skipped_no_sucursal, skipped_no_date, skipped_pre_cutoff,
     )
 
 

@@ -66,7 +66,13 @@ def catalogos_importar(request):
     if borrar_todo:
         config.permitir_carga_inicial = False
         config.save()
-        messages.success(request, f"Catalogos reemplazados desde cero: {resumen_texto} La carga inicial ya quedo desactivada.")
+        messages.success(
+            request,
+            f"Catalogos reemplazados desde cero: {resumen_texto} Tambien se borraron "
+            f"{resumen['gastos_reales_borrados']} gastos reales (desde 2026-01-01 en adelante) para que se "
+            "reclasifiquen con el catalogo nuevo en la proxima corrida del scheduler. La carga inicial ya quedo "
+            "desactivada.",
+        )
     else:
         messages.success(request, f"Catalogos actualizados: {resumen_texto}")
     return redirect("catalogos_admin")

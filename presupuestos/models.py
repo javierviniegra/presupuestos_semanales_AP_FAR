@@ -1,3 +1,5 @@
+import datetime
+
 from django.conf import settings
 from django.db import models
 
@@ -152,12 +154,28 @@ class Presupuesto(models.Model):
         return f"{self.sucursal} / {tipo} / {self.mes} = {self.monto}"
 
 
+# Business-rule cutoff decided 2026-09-10: the app only actively syncs and
+# manages GastoReal from this date forward. Anything already in the
+# database with an earlier fecha_pago is deliberately left alone forever -
+# scripts/scheduler.py never updates or deletes it (its "stale" cleanup is
+# scoped to this same cutoff), and a destructive catalog reload via
+# presupuestos/catalogos_excel.py only wipes GastoReal within this window
+# too. Rationale: only the last ~year of history is operationally needed;
+# older data (some going back to 2024) is kept as inert historical record
+# rather than deleted, in case it's ever needed for reference.
+GASTOREAL_SYNC_DESDE = datetime.date(2026, 1, 1)
+
+
 class GastoReal(models.Model):
     """
     One row per Odoo vendor-bill line (account.move.line). Synced read-only
     from Odoo; never edited by users. tipo_gasto is resolved at sync time via
     the hybrid CuentaContableTipoGasto / CategoriaProductoTipoGasto mapping,
     and can be null if that line couldn't be classified yet.
+
+    Only rows with fecha_pago >= GASTOREAL_SYNC_DESDE are actively synced/
+    managed (see that constant above) - earlier rows are kept as untouched
+    historical record.
 
     semana (the week this line counts toward) is based on fecha_pago, not
     fecha_factura - the point of this whole app is tracking cash actually

@@ -26,9 +26,13 @@
       <strong>borrar</strong> Categorias, Tipos de gasto, Cuentas contables
       -&gt; tipo de gasto y Categorias de producto -&gt; tipo de gasto
       actuales, y los va a reemplazar por completo con el contenido del
-      Excel. Sucursales, Presupuestos y Gastos reales no se tocan. Despues
-      de esta carga la bandera se apaga sola y las siguientes importaciones
-      solo actualizan (no borran nada).
+      Excel. Tambien va a <strong>borrar los Gastos reales desde el
+      2026-01-01 en adelante</strong> (no los de antes, esos se quedan
+      como historial) para que se reclasifiquen limpios con el catalogo
+      nuevo en la siguiente corrida del scheduler. Sucursales y
+      Presupuestos no se tocan. Despues de esta carga la bandera se apaga
+      sola y las siguientes importaciones solo actualizan (no borran nada,
+      ni de catalogos ni de Gastos reales).
     </p>
   {% else %}
     <p style="background:#f0e9d8;padding:10px 14px;">

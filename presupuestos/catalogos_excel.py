@@ -16,7 +16,14 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from core.database.odoo import get_odoo_connection
 
-from .models import Categoria, CategoriaProductoTipoGasto, CuentaContableTipoGasto, TipoGasto
+from .models import (
+    GASTOREAL_SYNC_DESDE,
+    Categoria,
+    CategoriaProductoTipoGasto,
+    CuentaContableTipoGasto,
+    GastoReal,
+    TipoGasto,
+)
 
 MAX_FILAS_VALIDACION = 500
 
@@ -235,17 +242,30 @@ def aplicar_plantilla(datos, borrar_todo):
     """
     borrar_todo=True wipes Categoria/TipoGasto/both mapping tables first
     (children before parents, so TipoGasto's own PROTECT constraints from
-    the mapping tables are already cleared by the time it's deleted).
+    the mapping tables are already cleared by the time it's deleted). It
+    also wipes GastoReal within the managed window (fecha_pago >=
+    GASTOREAL_SYNC_DESDE, see models.py) - since the mapping just got
+    replaced wholesale, existing GastoReal.tipo_gasto values were resolved
+    under the OLD mapping and would otherwise sit wrong until the next
+    scheduler.py run happens to overwrite them; wiping forces a clean
+    reclassification on that next run instead of leaving stale
+    classifications in the meantime. GastoReal before the cutoff is never
+    touched, matching scheduler.py's own scope - this is a reclassify, not
+    a "start over" of the deliberately-kept older history.
     TipoGasto is still PROTECTed by Presupuesto - if any exists, this raises
     django.db.models.ProtectedError and the whole transaction rolls back
     (the caller is expected to catch it and leave the flag untouched).
     borrar_todo=False only upserts: existing rows not mentioned in the
-    workbook are left as-is.
+    workbook are left as-is (GastoReal isn't touched at all in this mode).
     """
-    resumen = {"categorias": 0, "tipos": 0, "cuentas": 0, "categorias_producto": 0}
+    resumen = {"categorias": 0, "tipos": 0, "cuentas": 0, "categorias_producto": 0, "gastos_reales_borrados": 0}
 
     with transaction.atomic():
         if borrar_todo:
+            gastos_en_ventana = GastoReal.objects.filter(fecha_pago__gte=GASTOREAL_SYNC_DESDE)
+            resumen["gastos_reales_borrados"] = gastos_en_ventana.count()
+            gastos_en_ventana.delete()
+
             CategoriaProductoTipoGasto.objects.all().delete()
             CuentaContableTipoGasto.objects.all().delete()
             TipoGasto.objects.all().delete()
