@@ -1,18 +1,37 @@
 # scripts/scheduler.py
 #
-# Daily sync: Odoo paid/in_payment vendor-bill lines -> GastoReal in MySQL.
-# Meant to run once a day (~5am) via Windows Task Scheduler. Read-only on
-# the Odoo side; writes only to GastoReal.
+# Sync: Odoo paid/in_payment vendor-bill lines -> GastoReal in MySQL.
+# Read-only on the Odoo side; writes only to GastoReal. Two modes,
+# selected by the --full CLI flag:
 #
-# Reconciliation: every line currently paid/in_payment in Odoo with
-# fecha_pago >= GASTOREAL_SYNC_DESDE (models.py) is upserted (touches
-# sincronizado_en via auto_now). Afterward, any GastoReal row in that same
-# window NOT touched in this run - because its invoice was cancelled, its
-# payment was reverted, or the line no longer exists - is deleted. This is
-# how cancelled/un-paid invoices get removed automatically, without a
-# separate cancellation-handling path. Anything with fecha_pago before the
-# cutoff is never touched either way - deliberately kept as untouched
-# historical record (business decision 2026-09-10).
+#   Incremental (default - the twice-daily 5am/2pm Scheduled Tasks): only
+#   asks Odoo for bills with write_date >= RECENT_WINDOW_DAYS ago, so a
+#   routine run only costs what actually changed instead of re-processing
+#   the whole managed history every time (was taking 4-7 minutes for
+#   ~53k lines with almost nothing to show for it - see PROJECT_CONTEXT_
+#   REPORT.md 2026-09-10). Its stale-cleanup is scoped to GastoReal rows
+#   whose OWN fecha_pago also falls in that same recent window - a bill
+#   cancelled/reverted long after being paid won't be caught until the
+#   next full run, by design (see below); a bill cancelled shortly after
+#   being paid will be, since both its write_date and fecha_pago are
+#   recent.
+#
+#   Full (--full - the monthly "Catalogos mensual" Scheduled Task, see
+#   scripts/run_classify_odoo_catalog.bat): no write_date filter, and
+#   stale-cleanup covers the entire managed window. This is the safety
+#   net that eventually catches a cancellation/reversal too old for an
+#   incremental run to have noticed.
+#
+# Both modes: every line currently paid/in_payment in Odoo (within
+# whichever window applies) with fecha_pago >= GASTOREAL_SYNC_DESDE
+# (models.py) is upserted (touches sincronizado_en via auto_now).
+# Afterward, any in-scope GastoReal row NOT touched in this run - because
+# its invoice was cancelled, its payment was reverted, or the line no
+# longer exists - is deleted. This is how cancelled/un-paid invoices get
+# removed automatically, without a separate cancellation-handling path.
+# Anything with fecha_pago before GASTOREAL_SYNC_DESDE is never touched
+# by either mode - deliberately kept as untouched historical record
+# (business decision 2026-09-10).
 #
 # semana is based on fecha_pago (real payment date via account.payment,
 # through account.move.reconciled_payment_ids), not the invoice date -
@@ -66,6 +85,7 @@ from core.database.odoo import get_odoo_connection  # noqa: E402
 
 PAID_STATES = ["paid", "in_payment"]
 CHUNK = 500
+RECENT_WINDOW_DAYS = 30
 
 
 def iso_week_monday(d):
@@ -83,17 +103,24 @@ def resolve_tipo_gasto(account, product_id, prod_categ, account_map, category_ma
     return account_map.get(account[0])
 
 
-def run():
-    logger.info("scheduler run started")
+def run(full=False):
+    modo = "full" if full else "incremental"
+    logger.info("scheduler run started (modo=%s)", modo)
     sync_started_at = timezone.now()
 
     uid, models, db, password = get_odoo_connection()
 
     sucursal_by_company = {s.odoo_company_id: s for s in Sucursal.objects.all()}
 
+    domain = [["move_type", "=", "in_invoice"], ["payment_state", "in", PAID_STATES]]
+    recent_cutoff_date = (sync_started_at - datetime.timedelta(days=RECENT_WINDOW_DAYS)).date()
+    if not full:
+        recent_cutoff_dt = sync_started_at - datetime.timedelta(days=RECENT_WINDOW_DAYS)
+        domain.append(["write_date", ">=", recent_cutoff_dt.strftime("%Y-%m-%d %H:%M:%S")])
+
     bills = models.execute_kw(
         db, uid, password, "account.move", "search_read",
-        [[["move_type", "=", "in_invoice"], ["payment_state", "in", PAID_STATES]]],
+        [domain],
         {
             "fields": [
                 "id", "name", "invoice_date", "partner_id", "company_id", "payment_state",
@@ -193,26 +220,31 @@ def run():
         else:
             updated += 1
 
-    # Scoped to the same managed window as above - never touches anything
-    # with fecha_pago < GASTOREAL_SYNC_DESDE, no matter how old its
-    # sincronizado_en is.
-    stale = GastoReal.objects.filter(
-        sincronizado_en__lt=sync_started_at, fecha_pago__gte=GASTOREAL_SYNC_DESDE
-    )
+    # Full mode: scoped to the whole managed window (fecha_pago >=
+    # GASTOREAL_SYNC_DESDE) - the periodic safety net that reconciles
+    # anything an incremental run couldn't have safely caught.
+    # Incremental mode: scoped further, to fecha_pago >= recent_cutoff_date
+    # too - a row paid outside the recent window simply wasn't re-fetched
+    # this run (not necessarily invalid), so it must never be treated as
+    # stale here. Only a recently-paid row absent from this run's result
+    # is real evidence of a cancellation/reversal.
+    stale = GastoReal.objects.filter(sincronizado_en__lt=sync_started_at, fecha_pago__gte=GASTOREAL_SYNC_DESDE)
+    if not full:
+        stale = stale.filter(fecha_pago__gte=recent_cutoff_date)
     deleted_count = stale.count()
     stale.delete()
 
     logger.info(
-        "bills=%s lines=%s created=%s updated=%s deleted_stale=%s "
+        "modo=%s bills=%s lines=%s created=%s updated=%s deleted_stale=%s "
         "skipped_no_sucursal=%s skipped_no_date=%s skipped_pre_cutoff=%s",
-        len(bills), len(all_lines), created, updated, deleted_count,
+        modo, len(bills), len(all_lines), created, updated, deleted_count,
         skipped_no_sucursal, skipped_no_date, skipped_pre_cutoff,
     )
 
 
 if __name__ == "__main__":
     try:
-        run()
+        run(full="--full" in sys.argv)
     except Exception:
         logger.exception("scheduler run failed")
         raise

@@ -525,6 +525,30 @@ real dev data before shipping this).
   "keep old data as historial" decision made in the same conversation -
   flagged the conflict to the user before implementing, they didn't
   object to the resolution.
+
+**Performance fix, same conversation, 2026-09-10**: full scheduler.py
+runs were taking 4-7 minutes twice a day (~53k lines re-processed each
+time, almost all just `updated=` with nothing actually different -
+confirmed from logs/scheduler.log's real timestamps before touching
+anything). `scripts/scheduler.py` now has two modes:
+- **Incremental (default - what the existing 5am/2pm Scheduled Tasks
+  already call, unchanged)**: Odoo query adds `write_date >=
+  (now - RECENT_WINDOW_DAYS)` (30 days), so only recently-changed bills
+  get re-fetched. Its stale-cleanup is scoped to GastoReal rows whose OWN
+  `fecha_pago` is ALSO within that recent window - a row paid outside the
+  window simply wasn't re-fetched this run (not evidence it's invalid),
+  so it's excluded from deletion consideration entirely. Verified for
+  real (not just logic-reviewed) against dev + live Odoo: 2m2s (vs.
+  4-7min before), `deleted_stale=63` (small, sane), pre-cutoff count
+  unchanged (25,301) after the run.
+- **Full (`--full` flag)**: no write_date filter, stale-cleanup covers
+  the whole GASTOREAL_SYNC_DESDE window - added as a 3rd line in
+  `scripts/run_classify_odoo_catalog.bat` (the existing monthly
+  "Catalogos mensual" task), right after sync_sucursales/classify, so
+  cancellations older than 30 days still eventually get caught once a
+  month. Logic reviewed but not yet exercised for real (next natural
+  fire is 2026-10-01) - it's the same code path as incremental minus the
+  extra date filters, which the incremental test above already exercised.
 - SharePoint/Excel integration for non-Odoo branches (deferred phase,
   no details yet).
 - User-role testing: Administrador/Usuario/Sucursal groups exist and are
