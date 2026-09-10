@@ -36,6 +36,13 @@ Write-Host "=== Installing/updating dependencies ==="
 Write-Host "=== Applying database migrations ==="
 & $Python manage.py migrate --noinput
 
+Write-Host "=== Syncing sucursales from Odoo ==="
+# Idempotent (get_or_create by odoo_company_id) - safe on every deploy,
+# including the very first one. Without this, a brand-new environment has
+# zero Sucursal rows and scheduler.py silently skips every GastoReal line
+# (no matching Sucursal to attach it to) instead of erroring loudly.
+& $Python scripts\sync_sucursales.py
+
 Write-Host "=== Collecting static files ==="
 & $Python manage.py collectstatic --noinput
 

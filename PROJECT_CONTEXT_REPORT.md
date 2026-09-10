@@ -469,6 +469,30 @@ Paso 3: not started - candidates below.
     production database. Deliberate/known redundancy (each sync is an
     idempotent upsert, so double-running is harmless) - user chose
     autonomy over de-duplication.
+
+**Real bug found 2026-09-10** (day after go-live): production had zero
+`Sucursal` rows, so `Presupuesto` couldn't be entered for any branch and
+`scheduler.py` was silently skipping every `GastoReal` line (no matching
+Sucursal, per its `skipped_no_sucursal` counter) - no error, just quietly
+did nothing useful. Root cause: `scripts/sync_sucursales.py` is the ONLY
+thing that creates `Sucursal` rows, and it was never part of
+`deploy/PRODUCTION_SETUP.md`'s setup steps nor any Scheduled Task - the
+gap existed since the 2026-09-08 deploy-tooling work, just hadn't been
+noticed yet. Fixed same day:
+- `deploy/update.ps1` now runs `scripts\sync_sucursales.py` right after
+  `migrate`, every deploy (idempotent - get_or_create by
+  odoo_company_id) - covers both the very first deploy and every update
+  after.
+- `scripts/run_classify_odoo_catalog.bat` (the existing monthly
+  "Catalogos mensual" Scheduled Task, both dev and prod) now also runs
+  `sync_sucursales.py` first, so a brand-new branch in Odoo gets picked
+  up automatically going forward, not just at deploy time. Kept the same
+  filename/task name deliberately - renaming would have needed
+  re-registering the task on both machines.
+- Immediate unblock: user needs to run
+  `python scripts\sync_sucursales.py` by hand once on the prod app VM to
+  populate Sucursal rows right away, rather than waiting for the next
+  scheduled/deploy run.
 - SharePoint/Excel integration for non-Odoo branches (deferred phase,
   no details yet).
 - User-role testing: Administrador/Usuario/Sucursal groups exist and are

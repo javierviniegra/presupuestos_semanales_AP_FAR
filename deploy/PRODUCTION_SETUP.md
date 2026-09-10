@@ -146,6 +146,13 @@ python manage.py createsuperuser
 python manage.py collectstatic --noinput
 ```
 
+Sucursales are **not** created by `migrate` - that's a data sync from
+Odoo, handled by `scripts/sync_sucursales.py`, which `update.ps1` (next
+step) already runs automatically on every deploy, including this first
+one. Without it, `Presupuesto` can't be entered for any branch (no
+`Sucursal` rows exist yet to pick from) and `scheduler.py` silently skips
+every `GastoReal` line for a branch it doesn't recognize.
+
 ## 7. First launch (app VM)
 
 ```powershell
