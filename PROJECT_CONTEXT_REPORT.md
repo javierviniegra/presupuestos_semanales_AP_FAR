@@ -1,8 +1,12 @@
 # Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-09-10
+Last regenerated: 2026-09-17
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
-Local path: `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
+Local path: `C:\Users\JavierViniegra\OneDrive - GRUPO FONDA ARGENTINA\Escritorio\AnalisisRestaurantesBI\ControlPresupuestos_AP`
+(moved here from `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
+sometime between 2026-09-10 and 2026-09-17, same OneDrive migration as the
+Wansoft project - the old Desktop path no longer exists on this machine.
+venv/git/scheduled tasks all still work fine from the new path.)
 
 Master continuity document. Regenerate FULLY (never as a patch) when: asked
 explicitly, a major step closes, the conversation gets long, context usage
@@ -449,6 +453,17 @@ Paso 3: not started - candidates below.
 ## 10. Open questions / next step candidates (not yet decided with the user)
 
 ```text
+- **Fixed 2026-09-17**: detalle_semana's two invoice tables only showed
+  fecha_factura under a generic "Fecha" header, even though `semana` (and
+  the whole week-detail page) is grouped by fecha_pago - a bill invoiced
+  weeks earlier but paid within the displayed week looked like a
+  date-boundary bug (user reported: an invoice dated before the week's
+  Monday showing up inside that week). Not a grouping bug - `semana` was
+  always correctly computed from fecha_pago. Fixed by showing both dates,
+  clearly labeled ("Fecha de factura" / "Fecha de pago"), in both
+  facturas_resumen and facturas tables (views.py + detalle_semana.html).
+  Verified live: BILL/2026/07/0271 (fecha_factura 31/07) correctly shows
+  fecha_pago 04/09, inside the 31/08-06/09 week it's grouped under.
 - Confirm closing Paso 2 and the Paso 3 scope/numbering.
 - monto_pagado reliability (Section 5) - fix via account.partial.reconcile,
   or leave as a documented gap?
@@ -559,7 +574,8 @@ anything). `scripts/scheduler.py` now has two modes:
 ## 11. How to resume work in a new session
 
 1. Read this file first.
-2. `cd` into `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`.
+2. `cd` into `C:\Users\JavierViniegra\OneDrive - GRUPO FONDA ARGENTINA\Escritorio\AnalisisRestaurantesBI\ControlPresupuestos_AP`
+   (moved from Desktop 2026-09-17, see the path note at the top of this file).
 3. **Check XAMPP MySQL is running first** (`Get-NetTCPConnection -LocalPort 3306 -State Listen`) -
    it is NOT a Windows service and will not survive a reboot. See Section 2's
    "Known environment quirk" for the corruption-recovery steps if it won't start.
