@@ -174,6 +174,24 @@ service) and need XAMPP MySQL already running - same constraint as every
 other use of the app here. Verify with
 `Get-ScheduledTask | Where-Object { $_.TaskName -like "ControlPresupuestos_AP*" }`.
 
+**Outage 2026-09-15 to 2026-09-17, found and fixed 2026-09-17**: all
+three of these dev-machine tasks silently broke when this PC's OneDrive
+Known Folder Move redirected Desktop (see the path note at the top of
+this file) - they were still pointed at the now-dead
+`C:\Users\JavierViniegra\Desktop\...` path (`0x80070002` /
+FILE_NOT_FOUND in `Get-ScheduledTaskInfo`). Gastos reales AM/PM had been
+failing on every fire since 2026-09-15 (confirmed via
+`logs/scheduler.log`: a "run started" line with no matching completion
+line for each of those days); Catalogos mensual hadn't fired yet
+(first scheduled fire is 2026-10-01) so no data impact there, just a
+ticking time bomb caught before it went off. Re-registered all three
+with `Register-ScheduledTask`/`schtasks /Create` against the new
+OneDrive path and confirmed a manual trigger completes successfully
+(`created=168 updated=13262`). Production's own 4 scheduled tasks (app
+VM `SVR-HIKCENTER`, path `C:\Apps\ControlPresupuestos_AP`) were
+NEVER affected - different machine, different path, untouched by this
+PC's OneDrive move.
+
 Before this, GastoReal sync was **only run manually** despite being
 documented as "recommended daily" - confirmed via `Get-ScheduledTask` (no
 matching task existed) and the DB itself (last `sincronizado_en` was
