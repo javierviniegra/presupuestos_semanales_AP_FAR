@@ -727,7 +727,7 @@ def detalle_semana(request, sucursal_id, semana):
     estados_pago = dict(GastoReal.PAYMENT_STATE_CHOICES)
     facturas_resumen = [
         {**f, "estado_display": estados_pago.get(f["payment_state"], f["payment_state"])}
-        for f in gastos.values("factura_numero", "proveedor_nombre", "fecha_factura", "payment_state")
+        for f in gastos.values("factura_numero", "proveedor_nombre", "fecha_factura", "fecha_pago", "payment_state")
         .annotate(total=Sum("monto"))
         .order_by("-total")
     ]
