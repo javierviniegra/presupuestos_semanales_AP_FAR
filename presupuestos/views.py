@@ -522,11 +522,19 @@ def _calcular_contexto_dashboard(request):
         sucursales_seleccionadas = list(sucursales_disponibles)
     elif "filtro_aplicado" in request.GET:
         # The filter form was submitted (even if every checkbox ended up
-        # unchecked) - respect exactly what was selected, empty or not.
+        # unchecked) - respect exactly what was selected, empty or not, and
+        # remember it in the session so it's still selected next time this
+        # user opens the dashboard without resubmitting the filter.
         seleccion = request.GET.getlist("sucursal")
+        request.session["dashboard_sucursales"] = seleccion
+        sucursales_seleccionadas = list(sucursales_disponibles.filter(pk__in=seleccion))
+    elif "dashboard_sucursales" in request.session:
+        # No filter submitted this load (e.g. navigated back to /dashboard/
+        # from elsewhere) - restore whatever was last selected.
+        seleccion = request.session["dashboard_sucursales"]
         sucursales_seleccionadas = list(sucursales_disponibles.filter(pk__in=seleccion))
     else:
-        # First load, no filter interaction yet - default to everything.
+        # Never filtered before in this session - default to everything.
         sucursales_seleccionadas = list(sucursales_disponibles)
 
     try:
@@ -643,7 +651,7 @@ def _calcular_contexto_dashboard(request):
             "series": [{"nombre": g["sucursal_nombre"], "datos": g["gasto_real"]} for g in graficas],
         }
 
-    agrupar_general = request.GET.get("g_agrupar", "semana")
+    agrupar_general = request.GET.get("g_agrupar", "sucursal")
     if agrupar_general not in dict(OPCIONES_AGRUPAR_GENERAL):
         agrupar_general = "semana"
 
