@@ -81,15 +81,17 @@ class GastoRealAdmin(admin.ModelAdmin):
         "proveedor_nombre",
         "sucursal",
         "tipo_gasto",
+        "orden_compra",
         "fecha_factura",
         "fecha_pago",
+        "fecha_recepcion",
         "semana",
         "monto_formateado",
         "coincide_pago",
         "payment_state",
     ]
     list_filter = ["sucursal", "tipo_gasto", "payment_state", "semana"]
-    search_fields = ["factura_numero", "proveedor_nombre"]
+    search_fields = ["factura_numero", "proveedor_nombre", "orden_compra"]
 
     @admin.display(description="Factura vs pagado", boolean=True)
     def coincide_pago(self, obj):

@@ -113,7 +113,7 @@
     <table>
       <thead>
         <tr>
-          <th>Factura</th><th>Proveedor</th><th>Fecha de factura</th><th>Fecha de pago</th>
+          <th>Factura</th><th>Proveedor</th><th>Orden de compra</th><th>Fecha de factura</th><th>Fecha de pago</th>
           <th class="num">Monto total</th><th>Estado</th>
         </tr>
       </thead>
@@ -122,6 +122,7 @@
         <tr>
           <td>{{ f.factura_numero }}</td>
           <td>{{ f.proveedor_nombre }}</td>
+          <td>{{ f.orden_compra|default:"N/A" }}</td>
           <td>{{ f.fecha_factura|date:"d/m/Y" }}</td>
           <td>{{ f.fecha_pago|date:"d/m/Y"|default:"-" }}</td>
           <td class="num">${{ f.total|floatformat:2|intcomma }}</td>
@@ -141,7 +142,8 @@
     <table>
       <thead>
         <tr>
-          <th>Factura</th><th>Proveedor</th><th>Tipo de gasto</th><th>Fecha de factura</th><th>Fecha de pago</th>
+          <th>Factura</th><th>Proveedor</th><th>Tipo de gasto</th><th>Orden de compra</th>
+          <th>Fecha de factura</th><th>Fecha de pago</th>
           <th class="num">Monto</th><th>Estado</th>
         </tr>
       </thead>
@@ -151,6 +153,7 @@
           <td>{{ f.factura_numero }}</td>
           <td>{{ f.proveedor_nombre }}</td>
           <td>{{ f.tipo_gasto.nombre|default:"Sin clasificar" }}</td>
+          <td>{{ f.orden_compra|default:"N/A" }}</td>
           <td>{{ f.fecha_factura|date:"d/m/Y" }}</td>
           <td>{{ f.fecha_pago|date:"d/m/Y"|default:"-" }}</td>
           <td class="num">${{ f.monto|floatformat:2|intcomma }}</td>

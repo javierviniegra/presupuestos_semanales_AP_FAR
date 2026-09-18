@@ -33,12 +33,18 @@
 # by either mode - deliberately kept as untouched historical record
 # (business decision 2026-09-10).
 #
-# semana is based on fecha_pago (real payment date via account.payment,
-# through account.move.reconciled_payment_ids), not the invoice date -
-# sampled 87% of bills are paid on a different date than invoiced, the
-# whole point of this app is tracking cash paid per week. See GastoReal's
-# docstring in models.py for the multi-payment simplification and the
-# monto_factura/monto_pagado audit fields.
+# semana (business rule 2026-09-17, see GastoReal's docstring in
+# models.py): a line tied to a purchase order (Odoo's invoice_origin) uses
+# the PO's effective_date (goods receipt date - verified this matches the
+# linked stock.picking's date_done) instead of fecha_pago. A PO-linked
+# line whose PO hasn't been received yet is skipped entirely (not
+# assigned a fallback week) until Odoo shows a receipt. A line with no PO
+# (direct/service expense) still uses fecha_pago (real payment date via
+# account.payment, through account.move.reconciled_payment_ids) - 87% of
+# sampled bills are paid on a different date than invoiced, sometimes in
+# a different week entirely, and there's no receipt event to anchor to
+# instead. See GastoReal's docstring for the multi-payment simplification
+# and the monto_factura/monto_pagado audit fields.
 
 import datetime
 import logging
@@ -124,7 +130,7 @@ def run(full=False):
         {
             "fields": [
                 "id", "name", "invoice_date", "partner_id", "company_id", "payment_state",
-                "amount_total", "reconciled_payment_ids",
+                "amount_total", "reconciled_payment_ids", "invoice_origin",
             ],
             "limit": 50000,
         },
@@ -148,6 +154,21 @@ def run(full=False):
         bill["fecha_pago"] = max(fechas_pago) if fechas_pago else bill["invoice_date"]
         bill["monto_pagado"] = sum((p["amount"] for p in pagos), 0)
 
+    # PO-linked bills only (invoice_origin set) - fetch each PO's own
+    # effective_date (goods receipt date) once per distinct PO, not once
+    # per bill/line.
+    po_names = list({bill["invoice_origin"] for bill in bills if bill.get("invoice_origin")})
+    po_effective_date = {}
+    for i in range(0, len(po_names), CHUNK):
+        chunk = po_names[i:i + CHUNK]
+        pos = models.execute_kw(
+            db, uid, password, "purchase.order", "search_read",
+            [[["name", "in", chunk]]],
+            {"fields": ["name", "effective_date"]},
+        )
+        for po in pos:
+            po_effective_date[po["name"]] = po["effective_date"] or None
+
     all_lines = []
     for i in range(0, len(bill_ids), CHUNK):
         chunk = bill_ids[i:i + CHUNK]
@@ -169,7 +190,8 @@ def run(full=False):
     account_map = {m.odoo_account_id: m.tipo_gasto_id for m in CuentaContableTipoGasto.objects.all()}
     category_map = {m.odoo_category_id: m.tipo_gasto_id for m in CategoriaProductoTipoGasto.objects.all()}
 
-    created, updated, skipped_no_sucursal, skipped_no_date, skipped_pre_cutoff = 0, 0, 0, 0, 0
+    created, updated, skipped_no_sucursal, skipped_no_date = 0, 0, 0, 0
+    skipped_pre_cutoff, skipped_po_sin_recepcion = 0, 0
 
     for line in all_lines:
         bill = bill_by_id[line["move_id"][0]]
@@ -193,7 +215,19 @@ def run(full=False):
             skipped_pre_cutoff += 1
             continue
 
-        semana = iso_week_monday(fecha_pago)
+        orden_compra = bill.get("invoice_origin") or ""
+        fecha_recepcion = None
+        if orden_compra:
+            effective_date_raw = po_effective_date.get(orden_compra)
+            if not effective_date_raw:
+                # PO exists but Odoo hasn't recorded a receipt for it yet -
+                # excluded until it has (see models.py's GastoReal docstring).
+                skipped_po_sin_recepcion += 1
+                continue
+            fecha_recepcion = datetime.datetime.fromisoformat(effective_date_raw).date()
+            semana = iso_week_monday(fecha_recepcion)
+        else:
+            semana = iso_week_monday(fecha_pago)
 
         tipo_gasto_id = resolve_tipo_gasto(
             line["account_id"], line["product_id"], prod_categ, account_map, category_map
@@ -209,6 +243,8 @@ def run(full=False):
             fecha_factura=fecha_factura,
             fecha_pago=fecha_pago,
             semana=semana,
+            orden_compra=orden_compra,
+            fecha_recepcion=fecha_recepcion,
             monto=Decimal(str(line["price_total"])),
             monto_factura=Decimal(str(bill["amount_total"])),
             monto_pagado=Decimal(str(bill["monto_pagado"])),
@@ -236,9 +272,10 @@ def run(full=False):
 
     logger.info(
         "modo=%s bills=%s lines=%s created=%s updated=%s deleted_stale=%s "
-        "skipped_no_sucursal=%s skipped_no_date=%s skipped_pre_cutoff=%s",
+        "skipped_no_sucursal=%s skipped_no_date=%s skipped_pre_cutoff=%s "
+        "skipped_po_sin_recepcion=%s",
         modo, len(bills), len(all_lines), created, updated, deleted_count,
-        skipped_no_sucursal, skipped_no_date, skipped_pre_cutoff,
+        skipped_no_sucursal, skipped_no_date, skipped_pre_cutoff, skipped_po_sin_recepcion,
     )
 
 

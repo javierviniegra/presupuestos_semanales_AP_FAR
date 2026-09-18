@@ -1,6 +1,6 @@
 # Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-09-17
+Last regenerated: 2026-09-18
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
 Local path: `C:\Users\JavierViniegra\OneDrive - GRUPO FONDA ARGENTINA\Escritorio\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 (moved here from `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
@@ -587,6 +587,60 @@ anything). `scripts/scheduler.py` now has two modes:
 - User-role testing: Administrador/Usuario/Sucursal groups exist and are
   enforced in code, but never tested end-to-end with a real
   Sucursal-restricted user account.
+
+**New business rule 2026-09-17/18: semana depends on purchase-order
+linkage, not always fecha_pago.** User's own words: reports should only
+show a PO-linked invoice in the week its goods were actually received,
+not the week it happened to get paid - "no impacta en la carga de
+facturas, sino en como mostramos la informacion" (though it does in
+practice touch scheduler.py, since `semana` is a stored field computed at
+sync time, not a display-time calculation).
+
+- `GastoReal` gained two fields: `orden_compra` (Odoo's `invoice_origin`,
+  blank if none - a direct/service expense) and `fecha_recepcion` (the
+  linked `purchase.order`'s own `effective_date` - verified this exactly
+  matches the linked `stock.picking.date_done` before shipping, via a
+  live Odoo query against a real PO/receipt/invoice chain).
+- `scripts/scheduler.py`: a PO-linked line (`orden_compra` set) now gets
+  `semana = iso_week_monday(fecha_recepcion)` instead of fecha_pago. A
+  line whose PO exists but has no `effective_date` yet (not received) is
+  skipped entirely - excluded from the report until Odoo shows a receipt,
+  per explicit user decision (the alternative considered and rejected:
+  falling back to fecha_pago for these). A line with NO PO still uses
+  fecha_pago, unchanged - GASTOREAL_SYNC_DESDE's pre-cutoff-history
+  exclusion also still checks fecha_pago specifically, independent of
+  this change. New `skipped_po_sin_recepcion` counter in the log line.
+- `detalle_semana.html`'s two per-invoice tables gained an "Orden de
+  compra" column (shows "N/A" when blank) - the payment-status column
+  ("Estado") already existed in both, so nothing new needed there.
+  Anexo A/B in the PDF and reporte_proveedores stay aggregated (no
+  per-invoice rows), so this only applies to detalle_semana.
+- **Historical data**: user chose to recompute the whole managed window
+  rather than only apply this going forward. Simplest correct way to do
+  that turned out to be: wipe `GastoReal` where `fecha_pago >=
+  GASTOREAL_SYNC_DESDE` (pre-cutoff historial is a separate, always-
+  untouched concern - never wiped), then run `scheduler.py --full` to
+  let the already-being-tested normal sync path repopulate everything
+  under the new rule - no separate one-off recompute script needed
+  (user's own suggestion 2026-09-17, better than the bespoke
+  bulk-update-in-place script originally planned).
+- **Dev**: done and verified 2026-09-17/18. Wipe removed 31,970
+  in-window rows (25,301 pre-cutoff rows confirmed untouched); the full
+  resync created 31,868 lines, skipped 61 for `skipped_po_sin_recepcion`.
+  Live-verified via browser: a real invoice (Factu/2026/08/0044, PO
+  P14120) received 2026-08-13 but paid 2026-09-14 correctly shows under
+  the semana-2026-08-10 detail page, with "Orden de compra" and "Estado"
+  columns both rendering correctly; a no-PO line in the same view still
+  groups by fecha_pago as before.
+- **Production: NOT yet done as of 2026-09-18 morning** - explicitly
+  planned as a same-shaped one-time fix (wipe GastoReal in-window rows +
+  `scheduler.py --full` there too), deliberately scoped to touch ONLY
+  GastoReal - user was explicit this must NOT re-touch Categoria/
+  TipoGasto/mapping tables/Presupuesto/Sucursal, which are already
+  correctly set up in prod. Needs: `git pull` on the prod app VM first
+  (this code isn't pushed yet either - do that before touching prod
+  data), then the same two-step wipe+full-resync, run by the user (no
+  remote access to prod from this session).
 ```
 
 ## 11. How to resume work in a new session

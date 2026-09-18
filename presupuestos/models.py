@@ -177,10 +177,22 @@ class GastoReal(models.Model):
     managed (see that constant above) - earlier rows are kept as untouched
     historical record.
 
-    semana (the week this line counts toward) is based on fecha_pago, not
-    fecha_factura - the point of this whole app is tracking cash actually
-    paid out per week, and 87% of sampled bills are paid on a different date
-    than they're invoiced, sometimes in a different week entirely.
+    semana (the week this line counts toward) depends on whether the line
+    is tied to a purchase order (orden_compra set, from Odoo's
+    invoice_origin) - business rule 2026-09-17:
+      - PO-linked line: semana = the Monday of the week the PO's goods
+        were actually received (fecha_recepcion, from purchase.order's
+        own effective_date - verified against the linked stock.picking's
+        date_done before shipping this). A PO-linked line whose PO hasn't
+        been received yet in Odoo is excluded entirely (not synced) until
+        it has been - scripts/scheduler.py never assigns it a fecha_pago-
+        based week as a fallback.
+      - No PO (direct/service expense, e.g. rent, payroll, utilities):
+        semana = the Monday of the week fecha_pago falls in, same as
+        before this rule - 87% of sampled bills are paid on a different
+        date than they're invoiced, sometimes in a different week
+        entirely, so cash-basis is still the right criterion when there's
+        no receipt event to anchor to instead.
 
     When a bill has more than one reconciled payment (~4% of bills - real
     installments, e.g. $20,000 + $18,048 on different dates), fecha_pago
@@ -214,7 +226,19 @@ class GastoReal(models.Model):
     fecha_pago = models.DateField(
         null=True, blank=True, help_text="Fecha real de pago (la mas reciente si hubo varios pagos). Define semana."
     )
-    semana = models.DateField(help_text="Monday of the ISO week fecha_pago falls in.")
+    semana = models.DateField(
+        help_text="Monday of the managing week - fecha_recepcion if orden_compra is set, else fecha_pago."
+    )
+    orden_compra = models.CharField(
+        max_length=100, blank=True,
+        help_text="Odoo purchase.order name (invoice_origin). Blank if this line has no linked purchase order "
+        "(a direct/service expense, e.g. rent, payroll, utilities).",
+    )
+    fecha_recepcion = models.DateField(
+        null=True, blank=True,
+        help_text="Purchase order's effective_date (goods actually received). Only set when orden_compra is set; "
+        "determines semana for PO-linked lines instead of fecha_pago.",
+    )
     monto = models.DecimalField(
         max_digits=12, decimal_places=2,
         help_text="Linea con IVA incluido (Odoo price_total, no price_subtotal) - es el efectivo real pagado.",
