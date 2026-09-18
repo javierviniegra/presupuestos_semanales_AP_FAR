@@ -632,15 +632,17 @@ sync time, not a display-time calculation).
   the semana-2026-08-10 detail page, with "Orden de compra" and "Estado"
   columns both rendering correctly; a no-PO line in the same view still
   groups by fecha_pago as before.
-- **Production: NOT yet done as of 2026-09-18 morning** - explicitly
-  planned as a same-shaped one-time fix (wipe GastoReal in-window rows +
-  `scheduler.py --full` there too), deliberately scoped to touch ONLY
-  GastoReal - user was explicit this must NOT re-touch Categoria/
-  TipoGasto/mapping tables/Presupuesto/Sucursal, which are already
-  correctly set up in prod. Needs: `git pull` on the prod app VM first
-  (this code isn't pushed yet either - do that before touching prod
-  data), then the same two-step wipe+full-resync, run by the user (no
-  remote access to prod from this session).
+- **Production: DONE 2026-09-18**, run by the user on the app VM (no
+  remote access to prod from this session) - `git pull` (023ab3b),
+  `manage.py migrate`, wiped 13,950 in-window GastoReal rows (0
+  pre-cutoff rows existed there to begin with - prod only ever had
+  data from its 2026-09-09 go-live forward, unlike dev's inherited
+  2024-2025 history), then `scheduler.py --full`. Result nearly
+  identical to dev's: `created=31871 skipped_pre_cutoff=25301
+  skipped_po_sin_recepcion=61` (dev: 31868/25301/61 - the tiny
+  create-count difference is just a few minutes of real Odoo activity
+  between the two runs, not a discrepancy). Categoria/TipoGasto/mapping
+  tables/Presupuesto/Sucursal were never touched, as required.
 ```
 
 ## 11. How to resume work in a new session
