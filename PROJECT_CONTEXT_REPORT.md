@@ -1,708 +1,411 @@
 # Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-10-05
+Last regenerated: 2026-10-05 (end of day, at the Odoo-budget-mirror handoff)
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
-Local path: `C:\Users\JavierViniegra\OneDrive - GRUPO FONDA ARGENTINA\Escritorio\AnalisisRestaurantesBI\ControlPresupuestos_AP`
+Local path (dev PC): `C:\Users\JavierViniegra\OneDrive - GRUPO FONDA ARGENTINA\Escritorio\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 (moved here from `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 sometime between 2026-09-10 and 2026-09-17, same OneDrive migration as the
 Wansoft project - the old Desktop path no longer exists on this machine.
-venv/git/scheduled tasks all still work fine from the new path.)
+venv/git/scheduled tasks all work from the new path.)
 
 Master continuity document. Regenerate FULLY (never as a patch) when: asked
 explicitly, a major step closes, the conversation gets long, context usage
 passes ~70%, or a new chat is needed. This file is pushed to GitHub, so it
-stays in English even though working conversation with the user is Spanish.
+stays in English even though the working conversation with the user is Spanish.
+
+Standing handoff rule (applies to every FONDA project): when the owner says
+the context is exhausted, ALWAYS (1) regenerate this file in full, (2) write
+the handoff prompt, (3) suggest the new chat title in the format
+`FONDA (proyecto corto): Paso N[-M]: <short description>`, (4) commit and push
+if needed (English message, no secrets), and stop any running dev server.
 
 ---
 
+## 0. Where we stand (read this first)
+
+```text
+Latest commit on main: 9e089c2 "mirror Odoo's account budgets and use them in
+the reports" (pushed). Dev: fully verified. Production: git pull and migrate
+(0014) done by the owner on 2026-10-05; `.\deploy\update.ps1` did NOT run
+(the owner pasted it glued to the next command) - re-run it ALONE, then
+confirm it printed "Server is listening on port 8020", the dashboard shows
+the "Presupuesto por cuenta" button, Las Antenas / Puebla / Coyoacan show
+Odoo-based budgets, and logs\scheduler.log has a line like
+"presupuestos odoo: items=411 filas=402 ...". The owner said "listo" without
+pasting the output, so this is UNCONFIRMED.
+```
+
+Optional follow-ups, none requested yet (ask before touching any):
+1. Store the Odoo account on `GastoReal` to compare actual spend per account
+   against the per-account budget (see Section 7).
+2. Decide whether `_avance_mensual` should use `fecha_recepcion` for PO lines.
+3. Update the manuals for the new screens (Spanish ones are local only).
+4. The dashboard "Nomina y Personal" budget runs far above actual, because
+   payroll accounts are imported but payroll is not in vendor bills (the
+   owner chose "all costs and expenses" knowingly).
+5. The owner mentioned a "fase 2" earlier; it has no defined scope yet.
+
 ## 1. What this project is
 
-Web application to control branch (sucursal) budgets against actual spend,
-for Fonda Argentina's Accounts Payable team. Budgets are captured monthly
-(changed 2026-09-07, was weekly) but measurement stays weekly, plus a new
-monthly cumulative running-balance view.
+Django web application that controls branch (sucursal) budgets against actual
+spend for Fonda Argentina's Accounts Payable team.
 
 ```text
-Pull paid vendor bills per branch from Odoo (one or several branches selectable).
-Administrator enters MONTHLY budgets per branch, optionally broken down by
-  tipo de gasto (expense type) or as one lump sum ("everything else"). Each
-  month's amount is divided evenly across its days to get a daily rate,
-  then summed across a week's 7 days to measure that week - a week
-  spanning two months blends both months' daily rates.
-Home page (dashboard): two tables (overall and by tipo de gasto, still
-  weekly), a "Global" trend chart summing every selected sucursal into one
-  compras/presupuesto/tendencia line each on a LOGARITHMIC y-axis (so a
-  low-volume branch's swings stay visible next to a high-volume branch's -
-  a linear axis would flatten them), a per-sucursal trend chart below it
-  (same series, linear axis, one chart per branch), and a new "Avance
-  mensual" section: cumulative gasto and remaining monthly budget, week by
-  week, reset at the start of each month (no rollover) - negative
-  remaining is flagged in red.
-Each row links to a week-detail drill-down: KPIs, budget-vs-actual chart by
-  tipo de gasto, top providers chart, full invoice list for that week.
-Cross-branch provider report: total spend by provider across every
-  selected+active sucursal, grouped by proveedor/semana/sucursal.
-Pending/partial invoices report: live Odoo query (not the daily sync) of
-  not-yet-fully-paid bills, grouped by purchase order, using amount_residual.
-Executive PDF export: KPI summary + narrative + top-variance table + charts
-  (as static images) + detailed appendix tables + the same "Avance
-  mensual" section. Respects current dashboard filter.
+Actual spend: paid vendor bills per branch pulled from Odoo (GastoReal), synced
+  twice a day by a scheduler.
+Budget: for any branch+month that Odoo has a budget for, the app mirrors it
+  (per account) and uses it. Otherwise the admin enters a MONTHLY budget per
+  branch in Django admin, optionally split by tipo de gasto or as a lump sum
+  ("everything else"). Each month's amount is divided evenly across its days;
+  a week's budget is the sum of its 7 daily shares (a week spanning two months
+  blends both rates). Capture is monthly, measurement is weekly.
+Dashboard: two tables (overall, and by tipo de gasto), a "Global" trend chart
+  (log y-axis), per-sucursal trend charts, and "Avance mensual" (cumulative
+  monthly spend vs budget, reset each month, red when over).
+Week-detail drill-down, cross-branch provider report, pending-invoices report
+  (live Odoo), executive PDF (respects the dashboard filter), and a new
+  "Presupuesto por cuenta" page (Odoo budget by account).
 ```
 
-Deferred to a later phase (not started): branches not on Odoo will read
-their data from an Excel file in SharePoint. Format/source not discussed yet.
+Deferred (not started): branches not on Odoo will read data from an Excel file
+in SharePoint; format/source not discussed.
 
-## 2. Architecture
+## 2. Architecture and environments
 
 ```text
-Backend:      Django 4.2.30 (pinned <5.0 - MariaDB dev/prod are 10.4.x,
-              Django 5.0+ needs 10.5+)
-Frontend:     Django server-side templates + Chart.js 4.5.1 (interactive)
-              + matplotlib (Agg backend, static PNGs embedded in the PDF)
-Database:     MySQL/MariaDB via mysqlclient. Dev = XAMPP MySQL on THIS PC
-              (localhost:3306, NOT a remote host - unlike Wansoft's pattern).
-              Prod = TWO separate machines (clarified 2026-09-09, see
-              deploy/PRODUCTION_SETUP.md):
-                - App VM "SVR-HIKCENTER", internal IP 192.168.100.93,
-                  Windows 11. Runs this app via Waitress+WhiteNoise (no
-                  IIS/nginx), its own port (8020 by default).
-                - Proxy/DB server 187.251.203.223: MySQL (this app's prod
-                  DB lives here, db=presupuestos_ap, user=presupuestosusers)
-                  AND an Apache reverse proxy on port 8088 that maps
-                  URL paths to internal apps (already has /mba/, /tba/ for
-                  other Gradio apps) - this app is added as
-                  /presupuestos_ap/ -> http://192.168.100.93:8020/.
-                  End users hit http://187.251.203.223:8088/presupuestos_ap/,
-                  never the app VM directly.
-              Needs DJANGO_FORCE_SCRIPT_NAME=/presupuestos_ap (new setting,
-              config/settings.py) so Django's own generated links (static
-              files via WhiteNoise, admin, login redirect) come out
-              correctly prefixed for the proxy - Apache strips the prefix
-              on the way in (ProxyPass, matching the existing /mba//tba/
-              pattern), FORCE_SCRIPT_NAME adds it back on the way out.
-              WhiteNoise's STATIC_URL handling auto-un-prefixes its own
-              incoming-request matching to agree with this (verified by
-              reading whitenoise/middleware.py, not just assumed). Verified
-              end-to-end locally (Waitress, DJANGO_FORCE_SCRIPT_NAME set):
-              static files load, generated hrefs are single-prefixed, an
-              unauthenticated /dashboard/ redirects to a correctly
-              single-prefixed /presupuestos_ap/accounts/login/. Deploy
-              tooling ready (Waitress+WhiteNoise, deploy/update.ps1).
-              **LIVE as of 2026-09-09**: full production deployment done
-              and confirmed working end-to-end through the real proxy URL
-              (http://187.251.203.223:8088/presupuestos_ap/) - app VM set
-              up (Python/Git installed, repo cloned to
-              C:\Apps\ControlPresupuestos_AP, venv+deps, .env configured,
-              migrate/createsuperuser/collectstatic run against the prod
-              DB, deploy/update.ps1 started Waitress on port 8020), Apache
-              proxy block added on 187.251.203.223 and Apache restarted,
-              admin login confirmed working through the proxy (new users
-              created there too). No remote access to either machine from
-              this session throughout - the user ran every step by hand
-              from deploy/PRODUCTION_SETUP.md, guided step by step.
-              Not yet decided (see Section 10): reboot survival (Waitress
-              currently just a background process - see that doc's "Known
-              limitation" section) and whether prod runs its own Odoo sync
-              schedule.
-PDF export:   xhtml2pdf (pure Python, no system deps - WeasyPrint needs
-              GTK3, painful on Windows)
-Odoo:         XML-RPC, same instance/credentials as the Wansoft project
-Numbers:      django.contrib.humanize (intcomma) everywhere - dashboard,
-              PDF, admin
+Backend:  Django 4.2.30 (pinned <5.0: MariaDB 10.4.x dev/prod; Django 5 needs 10.5+)
+Frontend: server-side templates + Chart.js 4.5.1; matplotlib (Agg) PNGs in the PDF
+DB:       MySQL/MariaDB via mysqlclient
+PDF:      xhtml2pdf (pure Python)
+Excel:    openpyxl (catalog import/export)
+Odoo:     XML-RPC via core.database.odoo.get_odoo_connection (same instance and
+          credentials as the Wansoft project)
+Serving:  Waitress + WhiteNoise in production (no IIS/nginx)
+Numbers:  django.contrib.humanize (intcomma) everywhere
 ```
 
-### Dev/prod boundary (confirmed once)
+### Dev (this PC)
+- XAMPP MySQL on localhost:3306. It is NOT a Windows service (the owner
+  rejected making it one - do not re-suggest); start it by hand from the XAMPP
+  panel after every reboot.
+- Always `python manage.py runserver 8010` (never 8000).
+- Kill stale servers BY PROCESS PATH, not port:
+  `Get-Process python | Where-Object { $_.Path -like "*ControlPresupuestos_AP*" } | Stop-Process -Force`
+  then start fresh. Do it after every template/view/model edit before testing.
+- mysqld crash root cause (fixed 2026-09-07): native-AIO assertion
+  (`os0file.cc`), not Aria corruption. Fix is `innodb_use_native_aio=0` under
+  `[mysqld]` in `C:\xampp\mysql\bin\my.ini` (outside the repo - re-add if XAMPP
+  is reinstalled). If Aria corruption ever recurs: delete
+  `C:\xampp\mysql\data\aria_log.*` + `aria_log_control`, then `aria_chk.exe -r`
+  on the crashed table with mysqld stopped.
 
+### Production (two machines, no remote access from this session)
 ```text
-Dev = this PC (XAMPP MySQL, localhost:3306). Prod = app VM
-192.168.100.93 (SVR-HIKCENTER) + proxy/DB server 187.251.203.223 - see
-Section 2's database entry for the split. Only deploy/push actions to the
-real server need confirmation each time. Local/dev changes don't.
+App VM "SVR-HIKCENTER" 192.168.100.93, Windows 11, repo at C:\Apps\ControlPresupuestos_AP,
+  Waitress on port 8020, started by deploy\update.ps1.
+Proxy/DB server 187.251.203.223: MySQL 3306 (db presupuestos_ap, user
+  presupuestosusers - the password lives ONLY in the gitignored core\config\.env,
+  never print or repeat it) AND an Apache reverse proxy on port 8088 mapping
+  /presupuestos_ap/ -> http://192.168.100.93:8020/.
+Public URL: http://187.251.203.223:8088/presupuestos_ap/
 ```
+- `DJANGO_FORCE_SCRIPT_NAME=/presupuestos_ap` in the prod `.env`;
+  `STATIC_URL = f"{FORCE_SCRIPT_NAME or ''}/static/"`. Apache strips the prefix
+  on the way in, Django re-adds it on the way out; WhiteNoise un-prefixes its
+  own matching. Testing directly against Waitress WITH the prefix gives
+  misleading doubled-prefix results - test unprefixed.
+- **Waitress is a plain background process with no auto-reload. After any
+  `git pull`, code changes take effect only after `.\deploy\update.ps1`
+  restarts it.** (This caused a "I don't see the new columns" report.)
+- Windows Scheduled Tasks on prod: Gastos reales AM (5:00), PM (14:00),
+  Catalogos mensual (day 1, 04:00), and "Arranque automatico" (AtStartup, runs
+  as SYSTEM, runs update.ps1 so a reboot restarts the server). Both dev and
+  prod run the full schedule against the same prod DB - deliberate redundancy,
+  each sync is an idempotent upsert.
+- The owner runs every production command by hand, guided step by step. Any
+  production-affecting change needs explicit confirmation first.
+- First-time production setup lives in `deploy/PRODUCTION_SETUP.md`.
 
-### Known environment quirk: XAMPP MySQL needs manual start
-
-The dev DB is XAMPP's MySQL, **not a Windows service** (user explicitly
-rejected making it one - see memory `feedback_mysql_dev_no_windows_service`).
-After a machine restart/reboot it must be started by hand via the XAMPP
-control panel.
-
-**Root cause found and fixed 2026-09-07**: the recurring "Aria-engine
-corruption on unclean shutdown" (`Cannot find checkpoint record`, `Table
-'.\mysql\db' is marked as crashed`) was never the real problem - it was a
-downstream symptom. The actual cause was `mysqld.exe` itself crashing
-(Windows Application Error, exception `0x80000003` at a fixed offset,
-`InnoDB: Assertion failure in file os0file.cc line 6132, Failing
-assertion: slot` in the error log) - a known MariaDB-on-Windows bug in the
-native async-I/O slot manager, confirmed recurring since at least
-2026-08-03. Fixed by adding `innodb_use_native_aio=0` under `[mysqld]` in
-`C:\xampp\mysql\bin\my.ini` (falls back to simulated AIO - negligible perf
-cost for local single-user dev). Verified stable under load: `CHECK TABLE`
-across every table in `presupuestos_ap`/`wansoft`/`zenput` came back OK
-with mysqld surviving the whole pass (same PID throughout). This file is
-outside the git repo, so the fix isn't tracked in version control - if
-XAMPP is ever reinstalled or `my.ini` reset, re-add that line.
-
-If Aria corruption ever recurs anyway, the old recovery steps are still
-valid and safe (don't touch InnoDB data): delete
-`C:\xampp\mysql\data\aria_log.*` + `aria_log_control`, then if a specific
-system table (e.g. `mysql\db`) is still marked crashed, repair it with
-`C:\xampp\mysql\bin\aria_chk.exe -r <path-to-table-without-extension>`
-(mysqld must not be running during the repair).
-
-### Windows Task Scheduler: GastoReal sync + catalog classifier (set up 2026-09-08)
-
-Three scheduled tasks now exist on this machine, prefix `ControlPresupuestos_AP -`:
-
+### Scheduled tasks (dev, prefix "ControlPresupuestos_AP - ")
 ```text
-Gastos reales AM      Daily, 5:00am   -> scripts/scheduler.py
-Gastos reales PM      Daily, 2:00pm   -> scripts/scheduler.py (twice a day, per user request)
-Catalogos mensual     Day 1/month,    -> scripts/run_classify_odoo_catalog.bat, which cd's
-                      4:00am             into the project root and runs
-                                         scripts/classify_odoo_catalog.py, output appended
-                                         to logs/classify_odoo_catalog.log (schtasks' /TR has
-                                         a 261-char limit - a full absolute command line for
-                                         this one exceeded it, hence the .bat wrapper; the two
-                                         scheduler.py tasks were short enough to register
-                                         directly via Register-ScheduledTask with -Argument).
+Gastos reales AM   daily 5:00   scripts/scheduler.py
+Gastos reales PM   daily 14:00  scripts/scheduler.py
+Catalogos mensual  day 1 04:00  scripts/run_classify_odoo_catalog.bat
+                                 = sync_sucursales.py, classify_odoo_catalog.py,
+                                   then scheduler.py --full
 ```
+`schtasks /TR` is limited to 261 characters, hence the .bat wrapper. Dev tasks
+only fire while the laptop is on, logged in, with MySQL running (the AM task
+missed 2026-09-18 because the laptop was off). Outage 2026-09-15..17: all three
+tasks pointed at the dead Desktop path (`0x80070002`); re-registered against
+the OneDrive path on 2026-09-17. Prod tasks were never affected.
 
-Created via `Register-ScheduledTask` (the two daily ones) and `schtasks
-/Create` (the monthly one, via the .bat wrapper). All three only fire while
-this Windows user session is logged in (no stored credentials, not a
-service) and need XAMPP MySQL already running - same constraint as every
-other use of the app here. Verify with
-`Get-ScheduledTask | Where-Object { $_.TaskName -like "ControlPresupuestos_AP*" }`.
-
-**Outage 2026-09-15 to 2026-09-17, found and fixed 2026-09-17**: all
-three of these dev-machine tasks silently broke when this PC's OneDrive
-Known Folder Move redirected Desktop (see the path note at the top of
-this file) - they were still pointed at the now-dead
-`C:\Users\JavierViniegra\Desktop\...` path (`0x80070002` /
-FILE_NOT_FOUND in `Get-ScheduledTaskInfo`). Gastos reales AM/PM had been
-failing on every fire since 2026-09-15 (confirmed via
-`logs/scheduler.log`: a "run started" line with no matching completion
-line for each of those days); Catalogos mensual hadn't fired yet
-(first scheduled fire is 2026-10-01) so no data impact there, just a
-ticking time bomb caught before it went off. Re-registered all three
-with `Register-ScheduledTask`/`schtasks /Create` against the new
-OneDrive path and confirmed a manual trigger completes successfully
-(`created=168 updated=13262`). Production's own 4 scheduled tasks (app
-VM `SVR-HIKCENTER`, path `C:\Apps\ControlPresupuestos_AP`) were
-NEVER affected - different machine, different path, untouched by this
-PC's OneDrive move.
-
-Before this, GastoReal sync was **only run manually** despite being
-documented as "recommended daily" - confirmed via `Get-ScheduledTask` (no
-matching task existed) and the DB itself (last `sincronizado_en` was
-2026-09-02, 6 days stale, with 1,806/53,322 GastoReal rows unclassified).
-
-### Recurring dev-environment bug: stale runserver process
-
-Multiple times this session, editing a template/view and reloading the
-browser kept showing OLD content, even with DEBUG=True (no cached
-template loader configured) and even after using the port-based
-`Get-NetTCPConnection | Stop-Process` kill loop. Root cause never fully
-identified. **What reliably works**: kill by process path, not port -
-`Get-Process python | Where-Object { $_.Path -like "*ControlPresupuestos_AP*" } | Stop-Process -Force`
-- then start fresh. Do this after every template/view/model edit before
-re-testing, don't trust a "still running" server to have picked up changes.
-
-### Dev server port: 8010, not the Django default 8000
-
-Standing rule set 2026-09-02: always start with
-`python manage.py runserver 8010`, check `http://127.0.0.1:8010/`, not
-8000.
-
-### Browser-tool-specific quirks (not real app bugs)
-
-- The sandboxed preview browser blocks `<script src="external">` network
-  requests silently (no console error, no network log entry) even though
-  `fetch()` to the same URL works fine and a *dynamically appended*
-  `<script>` tag also works. Cause not fully understood; workaround was
-  always "this is a testing-tool limitation, verify the real user's
-  browser separately" - never chase it further.
-- Screenshots taken immediately after a scroll sometimes show a visual
-  "ghost duplicate" of chart content. Verified via `getBoundingClientRect()`
-  and `get_page_text()` on every occurrence that the real DOM has no
-  duplication - it's a capture/paint timing artifact of the tool, not a
-  layout bug. Don't re-investigate; just verify via DOM/text extraction
-  instead of trusting a mid-scroll screenshot.
-
-### Login testing pattern that reliably works
-
-The `find` tool's returned coordinates are sometimes wrong for this app's
-centered-card login form (clicks land outside the visible fields). What
-works: take a real `computer` screenshot first, read the actual pixel
-coordinates from *that* image, then click by `coordinate`, not by `ref`.
+### Browser/verification quirks (not app bugs)
+- Verification convention: create a throwaway superuser (`_temp_verify`),
+  verify in the browser pane, delete the user, close the tab, restart the dev
+  server by process path.
+- The Browser pane is often 0x0 right after navigation (wait 1-2 s, then
+  screenshot). Login coordinates change with the viewport: screenshot first
+  and click by `coordinate` from that image, not by `ref`.
+- The sandboxed browser silently blocks `<script src="external">`; screenshots
+  mid-scroll can show ghost duplicates. Verify via DOM/text, never chase it.
+- PowerShell tool: `$home` is a reserved variable; some `Remove-Item` calls
+  with path-like values get falsely blocked (split cleanup into separate
+  calls); the Bash tool mangles values starting with `/` (MSYS) - use
+  PowerShell for such tests.
 
 ## 3. Data model (presupuestos app)
 
 ```text
-Sucursal            odoo_company_id (unique), nombre, activa (admin can
-                     toggle - list_editable + bulk actions "Marcar como
-                     activa/inactiva"). 27 synced from Odoo res.company.
-Categoria            Costo de Ventas / Gasto Operativo (P&L top level)
-TipoGasto             12 seeded, each under a Categoria. Editable via admin.
+Sucursal             odoo_company_id (unique), nombre, activa (toggle in admin).
+Categoria / TipoGasto  Costo de Ventas / Gasto Operativo; 12 TipoGasto seeded.
 CuentaContableTipoGasto / CategoriaProductoTipoGasto
-                     Hybrid classification: direct-expense Odoo accounts map
-                     via CuentaContableTipoGasto; lines routed through the
-                     generic "Goods Received" clearing account (PO-matched
-                     purchases) map via the product's category instead
-                     (CategoriaProductoTipoGasto). Auto-discovered and
-                     keyword-classified from real Odoo data by
-                     scripts/classify_odoo_catalog.py (idempotent, re-run
-                     anytime - never overwrites a human classification).
-                     Added 2026-09-08: /admin/catalogos/ (link in the admin
-                     top bar) bulk-loads all 4 catalog tables from one
-                     Excel file (4 related sheets, Excel dropdowns
-                     enforcing valid Categoria/Tipo de gasto names) - see
-                     presupuestos/catalogos_excel.py. Governed by
-                     ConfiguracionCatalogos.permitir_carga_inicial: while
-                     True, import WIPES Categoria/TipoGasto/both mapping
-                     tables and reloads from the file, then flips itself to
-                     False; while False, import only upserts (never
-                     deletes). Sucursal/Presupuesto/GastoReal are never
-                     touched by this wipe. Presupuesto.tipo_gasto is
-                     on_delete=PROTECT, so a wipe attempt raises
-                     ProtectedError (caught, shown as a friendly message,
-                     nothing lost) if any Presupuesto already references a
-                     current TipoGasto - verified live in this dev DB.
-                     GastoReal.tipo_gasto is on_delete=SET_NULL though (not
-                     protected) - a successful wipe wipes NEW TipoGasto
-                     rows into existence with new PKs, so any GastoReal
-                     already classified under the old rows goes back to
-                     "sin clasificar" until the next scheduler.py run
-                     re-resolves it from the rebuilt mapping tables.
-Presupuesto          sucursal + tipo_gasto (nullable) + mes (first day of
-                     the calendar month, changed 2026-09-07 - was semana/
-                     Monday) + monto. tipo_gasto blank = "everything else":
-                     that amount splits EVENLY across whichever tipos_gasto
-                     (and the "sin clasificar" GastoReal bucket, if that
-                     sucursal/mes has any) do NOT have their own explicit
-                     Presupuesto row for the same sucursal/mes. See
-                     _resolver_presupuestos_mensuales() in views.py.
-                     Measurement stays weekly: each month's monto is
-                     divided by its day count, then _prorratear_por_dias()
-                     sums a week's 7 daily shares (a week spanning two
-                     months blends both months' rates) - this is how every
-                     weekly presupuesto figure in the dashboard/PDF is
-                     derived, not a direct per-week capture anymore.
-                     Separately, _avance_mensual() tracks a cumulative
-                     running remainder of each month's total budget, reset
-                     at month start (no rollover between months), shown
-                     week by week - this one buckets actual spend by exact
-                     calendar day (GastoReal.fecha_pago), not by the
-                     week-grain `semana`, so it can split a boundary week
-                     correctly on both the budget and the actual-spend
-                     side. Its numbers are intentionally a different cut
-                     than the per-week tables and won't reconcile 1:1
-                     against them for a month with a split week.
-GastoReal             One row per Odoo vendor-bill line. Synced daily,
-                     read-only, never user-edited. Key fields:
-                       fecha_factura  - real invoice date, reference only
-                       fecha_pago     - REAL payment date (latest, if >1
-                                        payment) - THIS drives `semana`
-                       monto          - line amount WITH TAX (price_total)
-                       monto_factura  - whole invoice total (amount_total)
-                       monto_pagado   - sum of reconciled payments' own
-                                        amount - UNRELIABLE, see Section 5
-                     tipo_gasto nullable = "sin clasificar" (Odoo mapping
-                     gap, not a data-entry choice).
-PerfilUsuario         User <-> Sucursal link, only enforced for the
-                     "Sucursal" role/group. Groups: Administrador, Usuario,
-                     Sucursal (seeded via migration).
+                     Hybrid classification: direct-expense accounts map via the
+                     account; lines through the generic "Goods Received" clearing
+                     account (PO purchases) map via the product category.
+                     Auto-discovered/keyword-classified by
+                     scripts/classify_odoo_catalog.py (idempotent, never
+                     overwrites a human choice). Bulk Excel load at
+                     /admin/catalogos/ (see below).
+ConfiguracionCatalogos  singleton pk=1, permitir_carga_inicial flag (self-disabling).
+Presupuesto          sucursal + tipo_gasto (nullable) + mes (first day of the month)
+                     + monto. save() normalizes mes to day 1. tipo_gasto is
+                     on_delete=PROTECT (blocks the destructive catalog wipe when
+                     presupuestos exist). Blank tipo_gasto = "everything else":
+                     split evenly across the tipos (and the "sin clasificar"
+                     bucket if that sucursal/month has any) with no explicit row.
+GastoReal            one row per Odoo vendor-bill line, synced, read-only.
+                       fecha_factura, fecha_pago (latest payment), monto
+                       (line amount WITH tax, price_total), monto_factura,
+                       monto_pagado (UNRELIABLE, see Section 5),
+                       orden_compra (Odoo invoice_origin, blank = direct/service),
+                       fecha_recepcion (purchase.order.effective_date),
+                       semana (see the week rule below), tipo_gasto (SET_NULL,
+                       null = sin clasificar).
+PresupuestoCuenta    read-only mirror of Odoo budgets: sucursal, mes,
+                     cuenta_codigo, cuenta_nombre, monto, odoo_budget_id,
+                     sincronizado_en. UniqueConstraint (sucursal, mes,
+                     cuenta_codigo). Fully replaced on every sync.
+CuentaPresupuestoTipoGasto
+                     account code (unique) -> TipoGasto (SET_NULL). Seeded by the
+                     sync; never overwrites a human-set tipo.
+PerfilUsuario        User <-> Sucursal, enforced only for the "Sucursal" group.
+                     Groups: Administrador, Usuario, Sucursal.
 ```
 
-## 4. Pages / views (presupuestos/views.py)
+Migrations: 0011 monthly capture (wipes old weekly Presupuesto), 0012
+ConfiguracionCatalogos, 0013 GastoReal.orden_compra/fecha_recepcion, 0014
+PresupuestoCuenta + CuentaPresupuestoTipoGasto.
+
+### GastoReal semantics
+- `GASTOREAL_SYNC_DESDE = 2026-01-01` is the managed window. Older rows are
+  untouched historial (the scheduler never writes or deletes them; the owner:
+  "solo necesitamos presupuestos del ultimo anio... dejalos como historial").
+- **Week rule (2026-09-17)**: a PO-linked line has `semana` = Monday of
+  `fecha_recepcion`; a PO line whose PO has no receipt yet is skipped
+  (`skipped_po_sin_recepcion`); a line with no PO uses `fecha_pago`. The
+  pre-cutoff check still uses `fecha_pago`.
+- Weeks are ISO weeks: Monday to Sunday.
+
+### Catalog Excel tool (`/admin/catalogos/`)
+`presupuestos/catalogos_excel.py`, `views_catalogos.py`,
+`templates/presupuestos/catalogos_admin.html`. 4 related sheets with Excel
+dropdowns. While `permitir_carga_inicial` is True, an import WIPES the 4
+catalog tables plus GastoReal within the managed window (pre-cutoff historial
+untouched) and reloads from the file, then flips the flag off; while False it
+only upserts. A ProtectedError from Presupuesto aborts the transaction and
+leaves the flag on. After a wipe, the next scheduler run reclassifies GastoReal.
+
+## 4. Pages (presupuestos/views.py, config/urls.py)
 
 ```text
-/                              Public landing page, links to /dashboard/
-/accounts/login/               Branded login
-/dashboard/                    Main dashboard: sucursal/semana filter
-                                (Odoo-style dropdown, chips, Todas/Ninguna),
-                                2 grouped/collapsible tables (Agrupar por:
-                                semana/sucursal, +tipo_gasto for table 2),
-                                per-sucursal trend chart, plus "Avance
-                                mensual del presupuesto" (cumulative
-                                monthly remaining, week by week, red when
-                                negative). Rows in table 1 link to
-                                detalle_semana.
-/dashboard/detalle/<suc>/<semana>/
-                                Week-detail: KPIs, budget-vs-actual bar
-                                chart by tipo_gasto, top-10 providers bar
-                                chart, per-invoice-total table, per-line
-                                table. Permission-checked against the
-                                viewer's allowed sucursales.
-/dashboard/proveedores/        Cross-branch provider report - combines
-                                every selected+active sucursal (deliberately,
-                                unlike detalle_semana). Top-15 chart +
-                                grouped table (proveedor/semana/sucursal).
-/dashboard/pendientes/         Live Odoo query (NOT from GastoReal) of
-                                not_paid/partial bills as of a cutoff date,
-                                grouped by purchase order (invoice_origin),
-                                using amount_residual (reliable, unlike
-                                monto_pagado - see Section 5).
-/dashboard/reporte.pdf         Executive PDF export of the current filter.
-/admin/                        Django admin, Fonda Argentina branded
-                                (green #035953, logo), Spanish (es-mx),
-                                has a "Dashboard" link back.
+/                                  public landing page
+/accounts/login/                   branded login
+/dashboard/                        main dashboard. Sucursal selection is persisted in
+                                   request.session["dashboard_sucursales"]; the main
+                                   table (g_agrupar) defaults to grouping by sucursal;
+                                   t_agrupar still defaults to tipo_gasto
+/dashboard/detalle/<suc>/<semana>/ week detail: KPIs, budget-vs-actual by tipo,
+                                   top providers, per-invoice tables with Orden de
+                                   compra, Fecha de factura, Fecha de recepcion,
+                                   Fecha de pago, Estado
+/dashboard/proveedores/            cross-branch provider report
+/dashboard/pendientes/             live Odoo unpaid/partial invoices by PO
+/dashboard/presupuesto-cuentas/    Odoo budget by sucursal > month > tipo > account
+/dashboard/reporte.pdf             executive PDF of the current filter
+/admin/catalogos/ (+2 routes)      Excel catalog tool
+/admin/                            Django admin, Fonda branded, es-mx
 ```
+Shared computation: `_calcular_contexto_dashboard(request)` (dashboard and PDF).
+Budget math: `_resolver_presupuestos_mensuales`, `_prorratear_por_dias`,
+`_avance_mensual`. `_avance_mensual` buckets actual spend by `fecha_pago` day
+and intentionally does not reconcile 1:1 with the weekly tables.
 
-Shared computation lives in `_calcular_contexto_dashboard(request)` -
-`dashboard`, `reporte_pdf` both call it. `detalle_semana`, `reporte_proveedores`,
-`facturas_pendientes` each have their own focused query (didn't force-fit
-the shared helper onto meaningfully different shapes).
+## 5. Data-accuracy bugs found by the owner cross-checking Odoo
 
-## 5. Two real data-accuracy bugs found and fixed this session
+1. Week used invoice date instead of payment date -> now uses real payment date
+   (`reconciled_payment_ids` -> `account.payment.date`, latest payment).
+2. Line amounts were pre-tax -> now `price_total` (sums to `amount_total` to
+   the cent). Whole history was re-synced.
+3. Dashboard showed invoices dated before the week's Monday (Coyoacan,
+   31 Aug): not a grouping bug - `semana` followed payment date. The week
+   detail now shows both fecha de factura and fecha de pago.
+4. Production had zero Sucursal rows (only sync_sucursales.py creates them) so
+   the scheduler silently skipped every line -> now run in update.ps1 and in
+   the monthly .bat.
+5. Naive date filtering of the scheduler would have deleted ~25k historical
+   rows via stale cleanup -> caught before shipping; cleanup is scoped to the
+   managed window.
+6. I forgot the `fecha_recepcion` column in detalle_semana; the owner caught it;
+   fixed in c4953c5.
 
-Both were caught by the user cross-checking the app against Odoo directly -
-neither would have been caught by "the sync ran without errors."
+Known gaps flagged, not fixed: `monto_pagado` is unreliable (payment totals can
+cover many invoices; a fix would use `account.partial.reconcile`); multi-payment
+bills (~4.2%) attribute the full line to the latest payment's week
+(simplification the owner accepted).
 
-1. **Week was based on invoice date, not payment date.** 87% of sampled
-   bills are paid on a different date than invoiced, sometimes a different
-   week entirely. Fixed: `semana` now derives from `fecha_pago` (via
-   `account.move.reconciled_payment_ids` -> `account.payment.date`, latest
-   payment if more than one). `fecha_factura` kept as pure reference.
-
-2. **Line amounts were pre-tax.** Synced `account.move.line.price_subtotal`
-   (no IVA) instead of `price_total` (with IVA - verified sums to
-   `amount_total` to the cent on real bills). This understated every
-   single GastoReal row by the line's tax amount, which defeats the whole
-   purpose of the app (tracking real cash paid). Fixed, and the full
-   53,301-row history was re-synced, not just new rows going forward.
-
-Both fixes were verified against the user's own manual Odoo cross-check
-(Coyoacan semana 34: app now shows $171,224.62, user's Odoo check was
-~$170,800, independent recomputation from Odoo gave $171,224.63 - 1 cent
-of rounding across 189 lines, not a bug).
-
-**Known remaining gap - `monto_pagado` is unreliable, flagged not fixed:**
-it sums `account.payment.amount` for a bill's reconciled payments, but that
-field is the payment TRANSACTION's total, which can cover multiple
-invoices at once. Sampled: 8,477 of 16,084 invoices show `monto_factura` !=
-`monto_pagado` by more than $1, some by over a million pesos (payment
-shared across many bills). Documented in `GastoReal`'s docstring rather
-than silently trusted. A reliable per-invoice fix would need
-`account.partial.reconcile`'s own per-match `amount` field - not
-implemented. Multi-payment bills (~4.2% of bills) also use a
-simplification: full line amount counts toward the LATEST payment's week,
-not proportionally split across payment dates - documented, not fixed
-(user confirmed this simplification is fine for now).
-
-## 6. Odoo integration details worth remembering
+## 6. Odoo integration notes
 
 ```text
-account.move (vendor bill) reconciled_payment_ids -> account.payment.date
-  is the real payment date. payment_ids is usually EMPTY - use
-  reconciled_payment_ids or matched_payment_ids instead.
-account.move.line.price_total (not price_subtotal) for tax-inclusive amounts.
-account.move.amount_residual = reliable per-invoice outstanding balance
-  (unlike summing account.payment.amount).
-account.move.invoice_origin = purchase order reference, often blank
-  (direct-entry bills have none) - fall back to "(Sin orden de compra)".
-Odoo's chart of accounts is heavily duplicated per company (513 distinct
-  account ids collapse to far fewer real concepts) - classify by NAME
-  (normalized/accent-stripped), never by id.
-Company IDs used in testing: Coyoacan=36 (Sucursal.id=22), Las Antenas=8,
-  Maq=9 in our DB. San Jeronimo/Vallejo/Fonda Argentina still have zero
-  Odoo purchase activity (pre-October-migration-wave branches).
+reconciled_payment_ids / matched_payment_ids (payment_ids is usually empty).
+price_total, not price_subtotal. amount_residual is the reliable outstanding
+balance. invoice_origin = PO reference (blank for direct bills).
+purchase.order.effective_date == stock.picking.date_done (verified live).
+Chart of accounts is duplicated per company -> classify by NAME or CODE, not id.
+Budgets: account.report.budget (name, company_id; one per company) and
+  account.report.budget.item (budget_id, account_id, amount, date).
+  Account ids differ per company (Carnes = 4922/8870/10021) but the CODE is
+  stable (501.01.03). account.account.code is per-company: read it only with
+  context={'allowed_company_ids': [company_id]}.
+  On 2026-10-05: Las Antenas (company 9, Jan-May), Puebla (34, Aug-Sep),
+  Coyoacan (36, Aug).
 ```
 
-## 7. Working conventions
+## 7. Odoo budget mirror (built 2026-10-05, commit 9e089c2)
+
+Owner decisions: keep per-account detail; import every cost/expense account
+(payroll included); skip revenue (codes starting "4"); Odoo replaces what was
+captured manually; sync daily.
+
+- `presupuestos/presupuestos_odoo.py` `sincronizar_presupuestos_odoo()`: reads
+  budgets and items; if two budgets of one company cover the same month the
+  highest id wins; skips revenue, zero amounts and unmapped companies; sums
+  duplicates per (sucursal, mes, code); seeds `CuentaPresupuestoTipoGasto`
+  (explicit `TIPO_POR_CODIGO` table for the 69 known codes plus prefix
+  fallbacks, never overwrites a human tipo); then inside `transaction.atomic`
+  replaces all `PresupuestoCuenta` rows. Never wipes if Odoo returns nothing.
+- It runs at the end of every `scripts/scheduler.py` run as an independent step
+  (failure -> exit code 1, but the GastoReal sync result is kept), via
+  `scripts/sync_presupuestos_odoo.py` manually, and inside `deploy/update.ps1`.
+- `_resolver_presupuestos_mensuales` overrides, per (sucursal, mes) covered by
+  `PresupuestoCuenta`, both the general total and the per-tipo dict. Manual
+  `Presupuesto` rows stay in the DB but are ignored there (so a month dropped
+  from Odoo falls back to the manual figure). Dashboard, PDF, detalle_semana
+  and avance mensual all inherit this.
+- Verified in dev: sync output "items=411 filas=402 sucursales=3
+  cuentas_nuevas_en_mapeo=68 omitidos_ingreso=8"; Coyoacan Aug = 1,288,759.05
+  (equals Odoo to the cent), per-tipo breakdown sums to the same figure; the
+  31/08 week blends 1 Aug day (Odoo) with 6 Sep days (manual) = 241,572.87;
+  end-to-end scheduler run OK; the sync is idempotent; the page and button
+  verified in the browser.
+- NOT done: comparing actual spend per account (GastoReal stores only the
+  resolved tipo_gasto, not the account; for PO lines it would be the product
+  category's expense account, stored at sync time).
+
+## 8. scheduler.py (GastoReal sync)
+
+- Incremental by default: Odoo query adds `write_date >= now - 30 days`, and
+  stale cleanup is scoped to GastoReal rows whose own `fecha_pago` is in that
+  window (2m2s instead of 4-7 min).
+- `--full`: no write_date filter; stale cleanup covers the whole managed
+  window; runs monthly via the .bat.
+- PO/receipt logic via `po_effective_date` (batched `purchase.order`
+  search_read on `invoice_origin`). Counters in the log line include
+  `skipped_pre_cutoff` and `skipped_po_sin_recepcion`.
+- Production recompute of the PO-week rule was done 2026-09-18 (wipe of 13,950
+  in-window rows, then `--full`: created=31871 skipped_pre_cutoff=25301
+  skipped_po_sin_recepcion=61). Categorias/TipoGasto/mappings/Presupuesto/
+  Sucursal were never touched.
+
+## 9. Working conventions
 
 ```text
-Git identity: Javier Viniegra <javier.viniegra@fondaargentina.com>
-Branch: main. Explicit files only, never `git add .`; never amend; push
-  only when asked (has been asked, and granted, every time so far this
-  session - still ask each time per the user's standing rule).
-Every feature this session: build -> verify with a temp throwaway Django
-  superuser account (created, tested, deleted) or direct DB/RequestFactory
-  checks -> commit with a detailed message including what was verified ->
-  ask "hago push?" -> push -> restart the dev server for the user.
-Real user-facing text in Spanish; commit messages, this report, code
-  comments all in English.
-Colors: Fonda Argentina green #035953 (verified from the real website,
-  not guessed) + orange #eb6834 (documented CVD-safe pairing) + muted gray
-  #898781 for trend/analytical overlays. Could not run the project's
-  formal palette validator (no Node.js on this machine) - informed
-  convention, not machine-verified; said so honestly rather than claiming
-  full validation.
+Git identity: Javier Viniegra <javier.viniegra@fondaargentina.com>. Branch main.
+Explicit files only, never `git add .`; never amend. Commit/push when asked.
+All GitHub content (commits, this report, docs, code comments) in English;
+chat and user-facing UI text in Spanish.
+Spanish manuals stay LOCAL and are never committed: docs/manual_configuracion.html,
+docs/manual_modulos_admin.html and their PDFs (Manual_de_Configuracion_...,
+Manual_Modulos_Admin_...). English ones are committed.
+.env is gitignored; never print or repeat any credential.
+Colors: Fonda green #035953, orange #eb6834, muted gray #898781.
+Every feature: build -> verify (temp superuser or direct DB/RequestFactory) ->
+commit with what was verified -> push -> restart the dev server.
 ```
 
-## 8. Git history (most recent first)
+Docs in the repo: `README.md`, `docs/USER_GUIDE.md` (3 usage profiles; notes
+that Odoo budgets override manual ones), English configuration and admin-module
+manuals (HTML + PDF) with `docs/screenshots/`, `deploy/PRODUCTION_SETUP.md`.
+Not yet covering the Odoo budget mirror: the Spanish manuals and the English
+admin-modules manual (no `PresupuestoCuenta` / `CuentaPresupuestoTipoGasto`
+screens, no "Presupuesto por cuenta" page).
+
+## 10. Git history (most recent first, all pushed)
 
 ```text
-9bd9963  Sync tax-inclusive line amounts (price_total), not pre-tax
-74aeaeb  Add pending/partial invoices report, grouped by purchase order
-5506009  Use real payment date, not invoice date, for GastoReal's semana
-91fe600  Add cross-branch provider report
-c8c5c7c  Add a per-invoice total list above the per-line breakdown
-6a8fccc  Add week-detail drill-down page
-a1517a9  Format money with thousand separators everywhere
-ab3707d  Include "sin clasificar" in the remainder budget split
-3bb1b2a  Spread blank-tipo_gasto Presupuesto across unspecified tipos
-f9dc85f  Restructure PDF into a real executive report
-6182a20  Add executive PDF export
-5f109c2  Allow lump-sum Presupuesto without tipo_gasto
-bae9c16  Add per-sucursal line chart
-3869273  ISO week number + Dashboard link from admin
-a2527c6  Fix "Ninguna" deselect-all bug
-cc2bb54  Add logging system
-434c5a3  Odoo-style filter dropdown + group-by
-9b549b1  Add login and dashboard
-(older: scaffolding, Django 4.2 pin, branding, Odoo sync/classification -
- see git log for full history, ~35 commits total)
+9e089c2  feat(presupuestos): mirror Odoo's account budgets and use them in the reports
+c4953c5  fix(detalle_semana): actually show the fecha_recepcion column
+726807f  feat(dashboard): remember sucursal filter, default the main table to sucursal grouping
+940ebfc  docs(project): mark the PO-receipt-week production fix as done
+023ab3b  feat(gastoreal): week for PO-linked lines follows goods-receipt date
+018951f  docs(project): log dev Scheduled Tasks outage from the OneDrive path move
+6d70922  docs(project): update local path after OneDrive move, log fecha de pago fix
+c3520b1  fix(detalle_semana): show fecha de pago alongside fecha de factura
+8f43b45  perf(scheduler): incremental sync by default, full reconciliation monthly
+0c437e9  feat(gastoreal): add a 2026-01-01 sync cutoff, wipe that window on catalog reload
+e71565c  fix(deploy): sync sucursales on every deploy, not just once manually
+8eaab89  docs(project): record production reboot-survival task and Odoo sync decision
+cd80d06  docs(project): mark production deployment as live
+101ca39  feat(deploy): add production deployment tooling (Waitress + WhiteNoise)
+a732a7e  feat(catalogos): add Excel bulk import/export for catalog tables
+a96b6f9  docs: add initial configuration manual (PDF + HTML source)
+f06df98  docs: add usability guide for admins, dashboard users, and reporting
+e700019  docs(readme): update overview for monthly budget capture
+42a5fae  feat(presupuestos): switch budget capture to monthly with weekly tracking
+8d70251  Expand executive PDF report
+(older: scaffolding, Django 4.2 pin, branding, Odoo sync/classification)
 ```
 
-All pushed to `origin/main` as of 2026-09-02.
-
-## 9. Step numbering and progress
+## 11. Step numbering
 
 ```text
-Paso 1: Scaffolding (Django, MySQL/Odoo connections, branding) - CLOSED 2026-09-01
-Paso 2: Data model, Odoo sync, main interface (dashboard, 3 reports, PDF,
-        budget entry with smart splitting, 2 critical data-accuracy fixes)
-        - substantially complete as of this report. Propose closing it
-        here given the scope covered; confirm with user.
-Paso 3: not started - candidates below.
+Paso 1: Scaffolding - CLOSED 2026-09-01.
+Paso 2: Data model, Odoo sync, dashboard, reports, PDF, budget capture, data-accuracy
+        fixes - closed in practice.
+Paso 3: Monthly capture, docs, catalog Excel tool, production deployment, scheduler
+        performance, PO-receipt week rule, dashboard memory - done.
+Paso 4: Odoo budgets by account (this handoff) - built and pushed; production
+        verification pending.
 ```
+Step numbers are tentative; the owner keeps their own count in the chat titles.
 
-## 10. Open questions / next step candidates (not yet decided with the user)
+## 12. Open questions (not decided with the owner)
 
-```text
-- **Built 2026-10-05: budgets mirrored from Odoo.** Odoo keeps budgets in
-  `account.report.budget` (one per company/sucursal; on 2026-10-05: Las
-  Antenas Jan-May, Puebla Aug-Sep, Coyoacan Aug - all named "Presupuesto
-  2026") with `account.report.budget.item` lines (account, month, amount).
-  User decisions: keep per-account detail, import every cost/expense
-  account (payroll included, so budget runs well above GastoReal, which has
-  no payroll - known/accepted), skip revenue (code 4xx), Odoo takes
-  precedence over manual Presupuesto, sync daily.
-  - Account IDs differ per company ("Carnes" = 4922/8870/10021) but the
-    account CODE is stable (501.01.03), so everything keys on code.
-    `account.account.code` is per-company: only readable with
-    `context={'allowed_company_ids': [company_id]}`.
-  - New models: `PresupuestoCuenta` (sucursal, mes, cuenta_codigo,
-    cuenta_nombre, monto - read-only mirror, fully replaced each sync) and
-    `CuentaPresupuestoTipoGasto` (code -> TipoGasto, seeded from an
-    explicit table in presupuestos/presupuestos_odoo.py for the 69 known
-    codes + family-prefix fallback; human edits never overwritten; FK is
-    SET_NULL so the catalog "carga inicial" wipe isn't blocked by it).
-  - `_resolver_presupuestos_mensuales` (views.py): for any sucursal/month
-    with PresupuestoCuenta rows, Odoo's figures REPLACE the manual
-    Presupuesto ones in the resolved dicts (manual rows stay in the DB,
-    just ignored there - deliberately not deleted, so a month dropped from
-    Odoo falls back to the manual figure). Dashboard, PDF, detalle_semana
-    and avance mensual all inherit this through that one function.
-  - Sync = `presupuestos/presupuestos_odoo.py`, run at the end of every
-    `scripts/scheduler.py` run (so 5am + 2pm via the existing tasks, no
-    re-registration needed) as an independent step, plus
-    `scripts/sync_presupuestos_odoo.py` for manual runs and a step in
-    `deploy/update.ps1`. Never wipes the table if Odoo returns nothing.
-    If two budgets of one company cover the same month the highest id wins.
-  - New page `/dashboard/presupuesto-cuentas/` (button on the dashboard)
-    shows sucursal > month > tipo > account.
-  - Verified: Coyoacan Aug total = $1,288,759.05 = Odoo's -241,280.79 minus
-    the -1,530,039.84 sales line, to the cent; week of 10/08 prorates to
-    $291,010.11 = total/31*7; the 31/08 week blends 1 Aug day (Odoo) with
-    6 Sep days (manual) = $241,572.87; July/Sep still use manual figures.
-  - NOT done (next step if wanted): comparing ACTUAL spend per account.
-    GastoReal stores only the resolved tipo_gasto, not the account, so the
-    per-account budget can't yet be compared against per-account actuals -
-    that needs the account (for PO lines: the product category's expense
-    account) stored on GastoReal at sync time.
-  - Production: needs `git pull`, `migrate` (0014) and `update.ps1`; the
-    first sync happens inside update.ps1.
-- Noticed 2026-10-05, not changed: `_avance_mensual` still buckets actual
-  spend by `fecha_pago` day, while PO-linked lines' `semana` now follows
-  the goods-receipt date (2026-09-17 rule) - so the monthly running-
-  balance view and the weekly tables can disagree for a PO line received
-  and paid in different months. Worth deciding whether avance mensual
-  should use the receipt date for PO lines too.
-- **Fixed 2026-09-17**: detalle_semana's two invoice tables only showed
-  fecha_factura under a generic "Fecha" header, even though `semana` (and
-  the whole week-detail page) is grouped by fecha_pago - a bill invoiced
-  weeks earlier but paid within the displayed week looked like a
-  date-boundary bug (user reported: an invoice dated before the week's
-  Monday showing up inside that week). Not a grouping bug - `semana` was
-  always correctly computed from fecha_pago. Fixed by showing both dates,
-  clearly labeled ("Fecha de factura" / "Fecha de pago"), in both
-  facturas_resumen and facturas tables (views.py + detalle_semana.html).
-  Verified live: BILL/2026/07/0271 (fecha_factura 31/07) correctly shows
-  fecha_pago 04/09, inside the 31/08-06/09 week it's grouped under.
-- Confirm closing Paso 2 and the Paso 3 scope/numbering.
-- monto_pagado reliability (Section 5) - fix via account.partial.reconcile,
-  or leave as a documented gap?
-- Multi-payment bill week-splitting (Section 5) - still fine as a
-  simplification, or worth the complexity now that tax/date bugs are fixed?
-- Production deployment: DONE and confirmed live 2026-09-09 - see
-  Section 2's database entry. Both follow-ups also resolved same day:
-  - Reboot survival: added a 4th Scheduled Task on the app VM,
-    "ControlPresupuestos_AP - Arranque automatico", trigger=AtStartup,
-    runs as SYSTEM (not the interactive user, so it fires without anyone
-    logged in), action = `powershell.exe -NoProfile -ExecutionPolicy
-    Bypass -File deploy\update.ps1`. Still doesn't restart Waitress if it
-    merely crashes without a reboot (would need NSSM or similar for that)
-    - not done, not asked for.
-  - Odoo sync: prod runs its own full 3-task schedule too (same as dev -
-    Gastos reales AM 5am/PM 2pm, Catalogos mensual day 1 4am), per
-    explicit user decision, even though both machines write to the SAME
-    production database. Deliberate/known redundancy (each sync is an
-    idempotent upsert, so double-running is harmless) - user chose
-    autonomy over de-duplication.
+- The "fase 2" scope.
+- Whether `_avance_mensual` should bucket PO lines by receipt date.
+- Per-account actual-vs-budget comparison (needs the account on GastoReal).
+- `monto_pagado` reliability and multi-payment week splitting.
+- Sucursal-restricted user accounts have never been tested end to end.
+- Update the manuals for the new screens.
 
-**Real bug found 2026-09-10** (day after go-live): production had zero
-`Sucursal` rows, so `Presupuesto` couldn't be entered for any branch and
-`scheduler.py` was silently skipping every `GastoReal` line (no matching
-Sucursal, per its `skipped_no_sucursal` counter) - no error, just quietly
-did nothing useful. Root cause: `scripts/sync_sucursales.py` is the ONLY
-thing that creates `Sucursal` rows, and it was never part of
-`deploy/PRODUCTION_SETUP.md`'s setup steps nor any Scheduled Task - the
-gap existed since the 2026-09-08 deploy-tooling work, just hadn't been
-noticed yet. Fixed same day:
-- `deploy/update.ps1` now runs `scripts\sync_sucursales.py` right after
-  `migrate`, every deploy (idempotent - get_or_create by
-  odoo_company_id) - covers both the very first deploy and every update
-  after.
-- `scripts/run_classify_odoo_catalog.bat` (the existing monthly
-  "Catalogos mensual" Scheduled Task, both dev and prod) now also runs
-  `sync_sucursales.py` first, so a brand-new branch in Odoo gets picked
-  up automatically going forward, not just at deploy time. Kept the same
-  filename/task name deliberately - renaming would have needed
-  re-registering the task on both machines.
-- Immediate unblock: user needs to run
-  `python scripts\sync_sucursales.py` by hand once on the prod app VM to
-  populate Sucursal rows right away, rather than waiting for the next
-  scheduled/deploy run.
-- Also 2026-09-10, same conversation: **also check whether catalogs were
-  ever classified in prod** - `classify_odoo_catalog.py` has the exact
-  same gap as sucursales did (only a monthly Scheduled Task, first fire
-  2026-10-01, nothing run at deploy time). If `CuentaContableTipoGasto`/
-  `CategoriaProductoTipoGasto` are near-empty in prod, run it by hand once
-  there too, same rationale as sync_sucursales - otherwise weeks of
-  GastoReal sync in the meantime lands as "Sin clasificar".
-
-**New business rule 2026-09-10**: `GASTOREAL_SYNC_DESDE = 2026-01-01`
-(`presupuestos/models.py`) - the app only actively syncs/manages
-`GastoReal` from this date forward. User's own words: "solo necesitamos
-presupuestos del ultimo año... dejalos [los de antes] como historial."
-Dev's DB has 53,445 GastoReal rows spanning 2024-02-19 to present,
-**25,301 of them before the cutoff** - verified these are NEVER touched by
-either mechanism below (tested via a rolled-back transaction against the
-real dev data before shipping this).
-- `scripts/scheduler.py`: skips writing any line whose `fecha_pago` is
-  before the cutoff (new `skipped_pre_cutoff` counter in its log line),
-  and its stale-cleanup delete is scoped to `fecha_pago__gte` cutoff too -
-  a pre-cutoff row can never be touched or deleted by a scheduler run,
-  no matter how long ago it was last synced.
-- `presupuestos/catalogos_excel.py`'s `aplicar_plantilla(borrar_todo=True)`
-  (the destructive "carga inicial" catalog reload) now ALSO deletes
-  GastoReal within that same window (not before it) - user's explicit
-  ask: after a full catalog reload, existing GastoReal was classified
-  under the OLD mapping and would sit wrong until the next scheduler run
-  happened to overwrite it; wiping the window forces a clean
-  reclassification on the very next run instead. This does NOT touch
-  pre-cutoff history, deliberately reconciling this request with the
-  "keep old data as historial" decision made in the same conversation -
-  flagged the conflict to the user before implementing, they didn't
-  object to the resolution.
-
-**Performance fix, same conversation, 2026-09-10**: full scheduler.py
-runs were taking 4-7 minutes twice a day (~53k lines re-processed each
-time, almost all just `updated=` with nothing actually different -
-confirmed from logs/scheduler.log's real timestamps before touching
-anything). `scripts/scheduler.py` now has two modes:
-- **Incremental (default - what the existing 5am/2pm Scheduled Tasks
-  already call, unchanged)**: Odoo query adds `write_date >=
-  (now - RECENT_WINDOW_DAYS)` (30 days), so only recently-changed bills
-  get re-fetched. Its stale-cleanup is scoped to GastoReal rows whose OWN
-  `fecha_pago` is ALSO within that recent window - a row paid outside the
-  window simply wasn't re-fetched this run (not evidence it's invalid),
-  so it's excluded from deletion consideration entirely. Verified for
-  real (not just logic-reviewed) against dev + live Odoo: 2m2s (vs.
-  4-7min before), `deleted_stale=63` (small, sane), pre-cutoff count
-  unchanged (25,301) after the run.
-- **Full (`--full` flag)**: no write_date filter, stale-cleanup covers
-  the whole GASTOREAL_SYNC_DESDE window - added as a 3rd line in
-  `scripts/run_classify_odoo_catalog.bat` (the existing monthly
-  "Catalogos mensual" task), right after sync_sucursales/classify, so
-  cancellations older than 30 days still eventually get caught once a
-  month. Logic reviewed but not yet exercised for real (next natural
-  fire is 2026-10-01) - it's the same code path as incremental minus the
-  extra date filters, which the incremental test above already exercised.
-- SharePoint/Excel integration for non-Odoo branches (deferred phase,
-  no details yet).
-- User-role testing: Administrador/Usuario/Sucursal groups exist and are
-  enforced in code, but never tested end-to-end with a real
-  Sucursal-restricted user account.
-
-**New business rule 2026-09-17/18: semana depends on purchase-order
-linkage, not always fecha_pago.** User's own words: reports should only
-show a PO-linked invoice in the week its goods were actually received,
-not the week it happened to get paid - "no impacta en la carga de
-facturas, sino en como mostramos la informacion" (though it does in
-practice touch scheduler.py, since `semana` is a stored field computed at
-sync time, not a display-time calculation).
-
-- `GastoReal` gained two fields: `orden_compra` (Odoo's `invoice_origin`,
-  blank if none - a direct/service expense) and `fecha_recepcion` (the
-  linked `purchase.order`'s own `effective_date` - verified this exactly
-  matches the linked `stock.picking.date_done` before shipping, via a
-  live Odoo query against a real PO/receipt/invoice chain).
-- `scripts/scheduler.py`: a PO-linked line (`orden_compra` set) now gets
-  `semana = iso_week_monday(fecha_recepcion)` instead of fecha_pago. A
-  line whose PO exists but has no `effective_date` yet (not received) is
-  skipped entirely - excluded from the report until Odoo shows a receipt,
-  per explicit user decision (the alternative considered and rejected:
-  falling back to fecha_pago for these). A line with NO PO still uses
-  fecha_pago, unchanged - GASTOREAL_SYNC_DESDE's pre-cutoff-history
-  exclusion also still checks fecha_pago specifically, independent of
-  this change. New `skipped_po_sin_recepcion` counter in the log line.
-- `detalle_semana.html`'s two per-invoice tables gained an "Orden de
-  compra" column (shows "N/A" when blank) - the payment-status column
-  ("Estado") already existed in both, so nothing new needed there.
-  Anexo A/B in the PDF and reporte_proveedores stay aggregated (no
-  per-invoice rows), so this only applies to detalle_semana.
-- **Historical data**: user chose to recompute the whole managed window
-  rather than only apply this going forward. Simplest correct way to do
-  that turned out to be: wipe `GastoReal` where `fecha_pago >=
-  GASTOREAL_SYNC_DESDE` (pre-cutoff historial is a separate, always-
-  untouched concern - never wiped), then run `scheduler.py --full` to
-  let the already-being-tested normal sync path repopulate everything
-  under the new rule - no separate one-off recompute script needed
-  (user's own suggestion 2026-09-17, better than the bespoke
-  bulk-update-in-place script originally planned).
-- **Dev**: done and verified 2026-09-17/18. Wipe removed 31,970
-  in-window rows (25,301 pre-cutoff rows confirmed untouched); the full
-  resync created 31,868 lines, skipped 61 for `skipped_po_sin_recepcion`.
-  Live-verified via browser: a real invoice (Factu/2026/08/0044, PO
-  P14120) received 2026-08-13 but paid 2026-09-14 correctly shows under
-  the semana-2026-08-10 detail page, with "Orden de compra" and "Estado"
-  columns both rendering correctly; a no-PO line in the same view still
-  groups by fecha_pago as before.
-- **Production: DONE 2026-09-18**, run by the user on the app VM (no
-  remote access to prod from this session) - `git pull` (023ab3b),
-  `manage.py migrate`, wiped 13,950 in-window GastoReal rows (0
-  pre-cutoff rows existed there to begin with - prod only ever had
-  data from its 2026-09-09 go-live forward, unlike dev's inherited
-  2024-2025 history), then `scheduler.py --full`. Result nearly
-  identical to dev's: `created=31871 skipped_pre_cutoff=25301
-  skipped_po_sin_recepcion=61` (dev: 31868/25301/61 - the tiny
-  create-count difference is just a few minutes of real Odoo activity
-  between the two runs, not a discrepancy). Categoria/TipoGasto/mapping
-  tables/Presupuesto/Sucursal were never touched, as required.
-```
-
-## 11. How to resume work in a new session
+## 13. How to resume work in a new session
 
 1. Read this file first.
-2. `cd` into `C:\Users\JavierViniegra\OneDrive - GRUPO FONDA ARGENTINA\Escritorio\AnalisisRestaurantesBI\ControlPresupuestos_AP`
-   (moved from Desktop 2026-09-17, see the path note at the top of this file).
-3. **Check XAMPP MySQL is running first** (`Get-NetTCPConnection -LocalPort 3306 -State Listen`) -
-   it is NOT a Windows service and will not survive a reboot. See Section 2's
-   "Known environment quirk" for the corruption-recovery steps if it won't start.
-4. Kill any stale server by PROCESS PATH before starting a fresh one (Section 2).
-5. `git log --oneline` / `git status` against Section 8 to confirm nothing
-   changed outside this report's knowledge.
-6. `.venv/Scripts/python.exe manage.py check` before doing anything else.
+2. `cd` into the dev path at the top of this file (NOT the old Desktop path).
+3. Check XAMPP MySQL is running (`Get-NetTCPConnection -LocalPort 3306 -State Listen`);
+   it is not a Windows service and does not survive a reboot.
+4. Kill any stale Django server by PROCESS PATH, then start
+   `python manage.py runserver 8010`.
+5. `git log --oneline` and `git status` against Section 10.
+6. `.venv\Scripts\python.exe manage.py check`.
+7. Then resolve the pending production confirmation in Section 0.
