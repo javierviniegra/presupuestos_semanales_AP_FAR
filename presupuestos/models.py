@@ -154,6 +154,76 @@ class Presupuesto(models.Model):
         return f"{self.sucursal} / {tipo} / {self.mes} = {self.monto}"
 
 
+class CuentaPresupuestoTipoGasto(models.Model):
+    """
+    Maps an Odoo account CODE (e.g. "501.01.03") to a TipoGasto, for rolling
+    PresupuestoCuenta up into the per-tipo budget the dashboard compares
+    against. Keyed by code, not by Odoo account id, because every company
+    (sucursal) has its OWN account ids for what is the same chart-of-accounts
+    line - "Carnes" is 4922 / 8870 / 10021 in three different companies but
+    always 501.01.03 - whereas CuentaContableTipoGasto (keyed by id) only
+    knows the accounts that happened to show up on a paid vendor bill.
+
+    Seeded automatically by presupuestos/presupuestos_odoo.py the first time a
+    code appears; a tipo_gasto a human set here is never overwritten by the
+    sync. SET_NULL (not PROTECT) so the destructive "carga inicial" catalog
+    reload, which deletes every TipoGasto, isn't blocked by this table - the
+    next sync just re-seeds the nulled rows.
+    """
+
+    codigo = models.CharField(max_length=30, unique=True)
+    nombre = models.CharField(max_length=255)
+    tipo_gasto = models.ForeignKey(TipoGasto, on_delete=models.SET_NULL, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["codigo"]
+        verbose_name = "cuenta de presupuesto -> tipo de gasto"
+        verbose_name_plural = "cuentas de presupuesto -> tipo de gasto"
+
+    def __str__(self):
+        return f"{self.codigo} {self.nombre} -> {self.tipo_gasto}"
+
+
+class PresupuestoCuenta(models.Model):
+    """
+    One row per (sucursal, month, Odoo account code): a read-only mirror of
+    Odoo's own "Accounting Report Budget" (account.report.budget /
+    account.report.budget.item), synced by presupuestos/presupuestos_odoo.py.
+    Never edited here - Odoo is the source of truth, and each sync replaces
+    the whole table.
+
+    Wherever a sucursal/month has rows here, they take PRECEDENCE over any
+    manually captured Presupuesto for that same sucursal/month (see
+    _resolver_presupuestos_mensuales in views.py) - the manual rows are left
+    in place, just ignored while Odoo covers that month, so removing a month
+    from Odoo's budget falls back to the manual figure instead of losing it.
+    Revenue accounts (code 4xx, negative amounts) are never imported.
+    """
+
+    sucursal = models.ForeignKey(Sucursal, on_delete=models.CASCADE, related_name="presupuestos_cuenta")
+    mes = models.DateField(help_text="First day of the month (Odoo's own budget item date).")
+    cuenta_codigo = models.CharField(max_length=30)
+    cuenta_nombre = models.CharField(max_length=255)
+    monto = models.DecimalField(max_digits=14, decimal_places=2)
+    odoo_budget_id = models.IntegerField()
+    sincronizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sucursal", "mes", "cuenta_codigo"], name="unique_presupuestocuenta_sucursal_mes_cuenta"
+            )
+        ]
+        indexes = [models.Index(fields=["sucursal", "mes"])]
+        ordering = ["sucursal", "-mes", "cuenta_codigo"]
+        verbose_name = "presupuesto por cuenta (Odoo)"
+        verbose_name_plural = "presupuestos por cuenta (Odoo)"
+
+    def __str__(self):
+        return f"{self.sucursal} / {self.mes} / {self.cuenta_codigo} = {self.monto}"
+
+
 # Business-rule cutoff decided 2026-09-10: the app only actively syncs and
 # manages GastoReal from this date forward. Anything already in the
 # database with an earlier fecha_pago is deliberately left alone forever -

@@ -1,8 +1,10 @@
 # scripts/scheduler.py
 #
 # Sync: Odoo paid/in_payment vendor-bill lines -> GastoReal in MySQL.
-# Read-only on the Odoo side; writes only to GastoReal. Two modes,
-# selected by the --full CLI flag:
+# Read-only on the Odoo side; writes only to GastoReal. After the GastoReal
+# run, also refreshes the Odoo budget mirror (PresupuestoCuenta, see
+# presupuestos/presupuestos_odoo.py) as its own independent step. Two modes
+# for the GastoReal part, selected by the --full CLI flag:
 #
 #   Incremental (default - the twice-daily 5am/2pm Scheduled Tasks): only
 #   asks Odoo for bills with write_date >= RECENT_WINDOW_DAYS ago, so a
@@ -86,6 +88,8 @@ from presupuestos.models import (  # noqa: E402
     GastoReal,
     Sucursal,
 )
+
+from presupuestos.presupuestos_odoo import sincronizar_presupuestos_odoo  # noqa: E402
 
 from core.database.odoo import get_odoo_connection  # noqa: E402
 
@@ -280,8 +284,20 @@ def run(full=False):
 
 
 if __name__ == "__main__":
+    # The Odoo budget mirror rides along on every GastoReal run (so it
+    # refreshes as often as the sync tasks fire - twice a day) but is its own
+    # step: one failing must not stop the other, though the task still exits
+    # non-zero so Task Scheduler's LastTaskResult shows something went wrong.
+    fallo = False
     try:
         run(full="--full" in sys.argv)
     except Exception:
         logger.exception("scheduler run failed")
-        raise
+        fallo = True
+    try:
+        sincronizar_presupuestos_odoo()
+    except Exception:
+        logger.exception("presupuestos odoo sync failed")
+        fallo = True
+    if fallo:
+        sys.exit(1)

@@ -6,9 +6,11 @@ from .models import (
     CategoriaProductoTipoGasto,
     ConfiguracionCatalogos,
     CuentaContableTipoGasto,
+    CuentaPresupuestoTipoGasto,
     GastoReal,
     PerfilUsuario,
     Presupuesto,
+    PresupuestoCuenta,
     Sucursal,
     TipoGasto,
 )
@@ -108,6 +110,35 @@ class GastoRealAdmin(admin.ModelAdmin):
 class PerfilUsuarioAdmin(admin.ModelAdmin):
     list_display = ["user", "sucursal"]
     list_filter = ["sucursal"]
+
+
+@admin.register(CuentaPresupuestoTipoGasto)
+class CuentaPresupuestoTipoGastoAdmin(admin.ModelAdmin):
+    list_display = ["codigo", "nombre", "tipo_gasto"]
+    list_filter = ["tipo_gasto"]
+    search_fields = ["codigo", "nombre"]
+
+
+@admin.register(PresupuestoCuenta)
+class PresupuestoCuentaAdmin(admin.ModelAdmin):
+    # Read-only mirror of Odoo's budget (see the model's docstring) - edits
+    # here would just be overwritten by the next sync, so don't allow them.
+    list_display = ["sucursal", "mes", "cuenta_codigo", "cuenta_nombre", "monto_formateado"]
+    list_filter = ["sucursal", "mes"]
+    search_fields = ["cuenta_codigo", "cuenta_nombre"]
+
+    @admin.display(description="Monto", ordering="monto")
+    def monto_formateado(self, obj):
+        return f"${intcomma(obj.monto)}"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(ConfiguracionCatalogos)

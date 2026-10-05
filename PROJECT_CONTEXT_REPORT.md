@@ -1,6 +1,6 @@
 # Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-09-18
+Last regenerated: 2026-10-05
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
 Local path: `C:\Users\JavierViniegra\OneDrive - GRUPO FONDA ARGENTINA\Escritorio\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 (moved here from `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
@@ -471,6 +471,55 @@ Paso 3: not started - candidates below.
 ## 10. Open questions / next step candidates (not yet decided with the user)
 
 ```text
+- **Built 2026-10-05: budgets mirrored from Odoo.** Odoo keeps budgets in
+  `account.report.budget` (one per company/sucursal; on 2026-10-05: Las
+  Antenas Jan-May, Puebla Aug-Sep, Coyoacan Aug - all named "Presupuesto
+  2026") with `account.report.budget.item` lines (account, month, amount).
+  User decisions: keep per-account detail, import every cost/expense
+  account (payroll included, so budget runs well above GastoReal, which has
+  no payroll - known/accepted), skip revenue (code 4xx), Odoo takes
+  precedence over manual Presupuesto, sync daily.
+  - Account IDs differ per company ("Carnes" = 4922/8870/10021) but the
+    account CODE is stable (501.01.03), so everything keys on code.
+    `account.account.code` is per-company: only readable with
+    `context={'allowed_company_ids': [company_id]}`.
+  - New models: `PresupuestoCuenta` (sucursal, mes, cuenta_codigo,
+    cuenta_nombre, monto - read-only mirror, fully replaced each sync) and
+    `CuentaPresupuestoTipoGasto` (code -> TipoGasto, seeded from an
+    explicit table in presupuestos/presupuestos_odoo.py for the 69 known
+    codes + family-prefix fallback; human edits never overwritten; FK is
+    SET_NULL so the catalog "carga inicial" wipe isn't blocked by it).
+  - `_resolver_presupuestos_mensuales` (views.py): for any sucursal/month
+    with PresupuestoCuenta rows, Odoo's figures REPLACE the manual
+    Presupuesto ones in the resolved dicts (manual rows stay in the DB,
+    just ignored there - deliberately not deleted, so a month dropped from
+    Odoo falls back to the manual figure). Dashboard, PDF, detalle_semana
+    and avance mensual all inherit this through that one function.
+  - Sync = `presupuestos/presupuestos_odoo.py`, run at the end of every
+    `scripts/scheduler.py` run (so 5am + 2pm via the existing tasks, no
+    re-registration needed) as an independent step, plus
+    `scripts/sync_presupuestos_odoo.py` for manual runs and a step in
+    `deploy/update.ps1`. Never wipes the table if Odoo returns nothing.
+    If two budgets of one company cover the same month the highest id wins.
+  - New page `/dashboard/presupuesto-cuentas/` (button on the dashboard)
+    shows sucursal > month > tipo > account.
+  - Verified: Coyoacan Aug total = $1,288,759.05 = Odoo's -241,280.79 minus
+    the -1,530,039.84 sales line, to the cent; week of 10/08 prorates to
+    $291,010.11 = total/31*7; the 31/08 week blends 1 Aug day (Odoo) with
+    6 Sep days (manual) = $241,572.87; July/Sep still use manual figures.
+  - NOT done (next step if wanted): comparing ACTUAL spend per account.
+    GastoReal stores only the resolved tipo_gasto, not the account, so the
+    per-account budget can't yet be compared against per-account actuals -
+    that needs the account (for PO lines: the product category's expense
+    account) stored on GastoReal at sync time.
+  - Production: needs `git pull`, `migrate` (0014) and `update.ps1`; the
+    first sync happens inside update.ps1.
+- Noticed 2026-10-05, not changed: `_avance_mensual` still buckets actual
+  spend by `fecha_pago` day, while PO-linked lines' `semana` now follows
+  the goods-receipt date (2026-09-17 rule) - so the monthly running-
+  balance view and the weekly tables can disagree for a PO line received
+  and paid in different months. Worth deciding whether avance mensual
+  should use the receipt date for PO lines too.
 - **Fixed 2026-09-17**: detalle_semana's two invoice tables only showed
   fecha_factura under a generic "Fecha" header, even though `semana` (and
   the whole week-detail page) is grouped by fecha_pago - a bill invoiced

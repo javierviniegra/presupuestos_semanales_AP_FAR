@@ -10,7 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Sum
+from django.db.models import Count, Max, Sum
 from django.db.models.functions import TruncMonth
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
@@ -20,7 +20,14 @@ from xhtml2pdf import pisa
 
 from core.database.odoo import get_odoo_connection
 
-from .models import GastoReal, Presupuesto, Sucursal, TipoGasto
+from .models import (
+    CuentaPresupuestoTipoGasto,
+    GastoReal,
+    Presupuesto,
+    PresupuestoCuenta,
+    Sucursal,
+    TipoGasto,
+)
 
 LOGO_PATH = Path(settings.BASE_DIR) / "presupuestos" / "static" / "presupuestos" / "img" / "logo.png"
 
@@ -116,6 +123,9 @@ def _resolver_presupuestos_mensuales(sucursales, meses):
     (via TruncMonth), not GastoReal.semana - a Monday-keyed week can
     nominally sit in a different month than a later fecha_pago in that same
     week, and this check needs the actual month, not the week's label.
+
+    Both dicts are then overridden, per sucursal/month, by Odoo's own budget
+    (PresupuestoCuenta) wherever it has rows - see the block at the end.
     """
     if not meses:
         return {}, {}
@@ -163,6 +173,29 @@ def _resolver_presupuestos_mensuales(sucursales, meses):
                 parte = round(remanente / len(no_especificados), 2)
                 for tid in no_especificados:
                     pres_resuelto_mensual[(suc_id, mes, tid)] = pres_resuelto_mensual.get((suc_id, mes, tid), 0) + parte
+
+    # Odoo's own budget (PresupuestoCuenta, see its docstring) takes
+    # precedence for any sucursal/month it covers: the manual figures above
+    # are left in the database but ignored for that exact sucursal/month, so
+    # dropping a month from Odoo's budget falls back to the manual one. Each
+    # account's amount lands on its mapped TipoGasto (None = unmapped, which
+    # the tables show as "sin clasificar"). No "everything else" spreading
+    # here - Odoo's budget is already explicit per account.
+    tipo_por_codigo = dict(CuentaPresupuestoTipoGasto.objects.values_list("codigo", "tipo_gasto_id"))
+    odoo_general = {}
+    odoo_por_tipo = {}
+    for suc_id, mes, codigo, monto in PresupuestoCuenta.objects.filter(
+        sucursal__in=sucursales, mes__in=meses
+    ).values_list("sucursal_id", "mes", "cuenta_codigo", "monto"):
+        odoo_general[(suc_id, mes)] = odoo_general.get((suc_id, mes), 0) + monto
+        clave_tipo = (suc_id, mes, tipo_por_codigo.get(codigo))
+        odoo_por_tipo[clave_tipo] = odoo_por_tipo.get(clave_tipo, 0) + monto
+
+    cubiertos = set(odoo_general)
+    for clave in [k for k in pres_resuelto_mensual if (k[0], k[1]) in cubiertos]:
+        del pres_resuelto_mensual[clave]
+    pres_general_mensual.update(odoo_general)
+    pres_resuelto_mensual.update(odoo_por_tipo)
 
     return pres_general_mensual, pres_resuelto_mensual
 
@@ -865,6 +898,71 @@ def facturas_pendientes(request):
         "total_facturas": pendientes["total_facturas"],
     }
     return render(request, "presupuestos/facturas_pendientes.html", context)
+
+
+@login_required
+def presupuesto_cuentas(request):
+    """
+    Odoo's budget, account by account (PresupuestoCuenta, a read-only mirror
+    synced from Odoo - see presupuestos/presupuestos_odoo.py), grouped
+    sucursal > month > tipo de gasto > account. Shows every month Odoo has a
+    budget for, not just the dashboard's current period, since each sucursal's
+    budget covers a different stretch of the year.
+    """
+    sucursales_disponibles, restringido_a_una = _sucursales_para_usuario(request.user)
+
+    if restringido_a_una:
+        sucursales_seleccionadas = list(sucursales_disponibles)
+    elif "filtro_aplicado" in request.GET:
+        seleccion = request.GET.getlist("sucursal")
+        sucursales_seleccionadas = list(sucursales_disponibles.filter(pk__in=seleccion))
+    elif "dashboard_sucursales" in request.session:
+        # Same remembered selection the dashboard itself restores.
+        seleccion = request.session["dashboard_sucursales"]
+        sucursales_seleccionadas = list(sucursales_disponibles.filter(pk__in=seleccion))
+    else:
+        sucursales_seleccionadas = list(sucursales_disponibles)
+
+    nombre_tipo_por_codigo = {
+        c.codigo: (c.tipo_gasto.nombre if c.tipo_gasto else "Sin categoria (sin clasificar)")
+        for c in CuentaPresupuestoTipoGasto.objects.select_related("tipo_gasto")
+    }
+
+    filas = PresupuestoCuenta.objects.filter(sucursal__in=sucursales_seleccionadas)
+    por_suc_mes = {}
+    for f in filas:
+        por_suc_mes.setdefault((f.sucursal_id, f.mes), []).append(f)
+
+    grupos = []
+    for suc in sorted(sucursales_seleccionadas, key=lambda s: s.nombre):
+        meses_out = []
+        for mes in sorted({m for (sid, m) in por_suc_mes if sid == suc.id}, reverse=True):
+            tipos = {}
+            for f in por_suc_mes[(suc.id, mes)]:
+                tipo = tipos.setdefault(
+                    nombre_tipo_por_codigo.get(f.cuenta_codigo, "Sin categoria (sin clasificar)"),
+                    {"subtotal": 0, "cuentas": []},
+                )
+                tipo["subtotal"] += f.monto
+                tipo["cuentas"].append(f)
+            tipos_ordenados = []
+            for nombre, datos in sorted(tipos.items(), key=lambda kv: kv[1]["subtotal"], reverse=True):
+                datos["cuentas"].sort(key=lambda f: f.monto, reverse=True)
+                tipos_ordenados.append({"nombre": nombre, **datos})
+            meses_out.append(
+                {"mes": mes, "total": sum(t["subtotal"] for t in tipos_ordenados), "tipos": tipos_ordenados}
+            )
+        if meses_out:
+            grupos.append({"sucursal": suc, "meses": meses_out})
+
+    context = {
+        "sucursales_disponibles": sucursales_disponibles,
+        "sucursales_seleccionadas_ids": {s.id for s in sucursales_seleccionadas},
+        "restringido_a_una": restringido_a_una,
+        "grupos": grupos,
+        "ultima_sincronizacion": PresupuestoCuenta.objects.aggregate(m=Max("sincronizado_en"))["m"],
+    }
+    return render(request, "presupuestos/presupuesto_cuentas.html", context)
 
 
 @login_required

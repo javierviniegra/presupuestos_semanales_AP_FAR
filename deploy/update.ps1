@@ -43,6 +43,13 @@ Write-Host "=== Syncing sucursales from Odoo ==="
 # (no matching Sucursal to attach it to) instead of erroring loudly.
 & $Python scripts\sync_sucursales.py
 
+Write-Host "=== Syncing budgets from Odoo ==="
+# Needs the Sucursal rows from the step above (budgets are matched to a
+# sucursal by Odoo company). Also runs after every scheduler.py sync, so this
+# just makes a fresh deploy show budgets immediately instead of waiting for
+# the next scheduled run.
+& $Python scripts\sync_presupuestos_odoo.py
+
 Write-Host "=== Collecting static files ==="
 & $Python manage.py collectstatic --noinput
 

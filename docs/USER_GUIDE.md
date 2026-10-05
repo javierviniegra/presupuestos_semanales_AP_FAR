@@ -5,6 +5,17 @@ architecture and data model details, see [PROJECT_CONTEXT_REPORT.md](../PROJECT_
 
 ## 1. Entering the monthly budget (admin)
 
+> **Budgets that exist in Odoo come from Odoo.** The app mirrors Odoo's own
+> budgets (Contabilidad > Reportes > Estado de resultados > Presupuesto),
+> account by account, twice a day. For any branch and month Odoo has a
+> budget for, that budget is the one the dashboard and reports use, and a
+> figure typed by hand here for that same branch and month is ignored (not
+> deleted - if Odoo's budget for that month is ever removed, the manual
+> figure takes over again). Edit those budgets in Odoo, not here; see every
+> account in **Presupuesto por cuenta** (button on the dashboard). The
+> manual entry below only matters for branches/months Odoo has no budget
+> for yet.
+
 Budgets are captured **once per month**, not per week. The app then
 prorates that amount evenly across the days of the month and compares it
 against actual spend week by week.
