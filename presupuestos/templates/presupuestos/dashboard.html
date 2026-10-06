@@ -233,6 +233,7 @@
     {{ request.user.get_username }}
     &middot;
     {% if request.user.is_staff %}<a class="logout" href="{% url 'admin:index' %}">Administrador</a> &middot;{% endif %}
+    <a class="logout" href="{% url 'ayuda' %}">Ayuda</a> &middot;
     <a class="logout" href="{% url 'logout' %}">Cerrar sesion</a>
   </div>
 </header>

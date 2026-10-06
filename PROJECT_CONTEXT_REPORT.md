@@ -25,15 +25,21 @@ if needed (English message, no secrets), and stop any running dev server.
 
 ```text
 Latest commit on main: 9e089c2 "mirror Odoo's account budgets and use them in
-the reports" (pushed). Dev: fully verified. Production: git pull and migrate
-(0014) done by the owner on 2026-10-05; `.\deploy\update.ps1` did NOT run
-(the owner pasted it glued to the next command) - re-run it ALONE, then
-confirm it printed "Server is listening on port 8020", the dashboard shows
-the "Presupuesto por cuenta" button, Las Antenas / Puebla / Coyoacan show
-Odoo-based budgets, and logs\scheduler.log has a line like
-"presupuestos odoo: items=411 filas=402 ...". The owner said "listo" without
-pasting the output, so this is UNCONFIRMED.
+the reports" (pushed). Dev: fully verified. Production: VERIFIED on
+2026-10-06 - the owner ran git pull and migrate (0014) on 2026-10-05, and a
+one-time scheduled task ran update.ps1 at 05:30 on 2026-10-06; Waitress
+restarted, the "Presupuesto por cuenta" button shows, and the page lists the
+Odoo budgets for the three sucursales, matching Odoo.
 ```
+
+Update 2026-10-06: the one-time task "ControlPresupuestos_AP - Actualizacion
+unica" ran update.ps1 on the prod VM at 05:30 (result 0). Production now has
+the new code, the "Presupuesto por cuenta" button, and the Odoo budgets
+(402 rows, confirmed in the scheduler log and on the page; Antenas Jan-May,
+Puebla Aug-Sep, Coyoacan Aug). The dashboard only shows Odoo budgets for weeks
+inside those months; recent weeks use the manual budget. The in-app help page
+(/ayuda/) was built the same day (committed locally; needs push + update.ps1
+on the VM to reach production).
 
 Optional follow-ups, none requested yet (ask before touching any):
 1. Store the Odoo account on `GastoReal` to compare actual spend per account
@@ -233,6 +239,12 @@ leaves the flag on. After a wipe, the next scheduler run reclassifies GastoReal.
 /dashboard/pendientes/             live Odoo unpaid/partial invoices by PO
 /dashboard/presupuesto-cuentas/    Odoo budget by sucursal > month > tipo > account
 /dashboard/reporte.pdf             executive PDF of the current filter
+/ayuda/                            in-app help (login required): user manual, FAQ,
+                                   glossary, and a highlighted notice for the
+                                   accountants who load budgets in Odoo. Static
+                                   Spanish content in templates/ayuda.html; linked
+                                   from the dashboard, presupuesto-cuentas and the
+                                   admin top bar. Added 2026-10-06
 /admin/catalogos/ (+2 routes)      Excel catalog tool
 /admin/                            Django admin, Fonda branded, es-mx
 ```

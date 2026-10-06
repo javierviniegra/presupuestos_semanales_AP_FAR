@@ -966,6 +966,15 @@ def presupuesto_cuentas(request):
 
 
 @login_required
+def ayuda(request):
+    """
+    In-app help: the user manual plus the notice for the accountants who load
+    budgets in Odoo. Static content (all in the template), so no context.
+    """
+    return render(request, "presupuestos/ayuda.html")
+
+
+@login_required
 def reporte_pdf(request):
     context = _calcular_contexto_dashboard(request)
     context["generado_en"] = timezone.now()

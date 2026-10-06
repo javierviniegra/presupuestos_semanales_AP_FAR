@@ -29,7 +29,8 @@ urlpatterns = [
     path("dashboard/proveedores/", views.reporte_proveedores, name="reporte_proveedores"),
     path("dashboard/pendientes/", views.facturas_pendientes, name="facturas_pendientes"),
     path("dashboard/presupuesto-cuentas/", views.presupuesto_cuentas, name="presupuesto_cuentas"),
-    path("accounts/login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
+    path("ayuda/", views.ayuda, name="ayuda"),
+    path("accounts/login/",auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(next_page="home"), name="logout"),
     # Must come before admin.site.urls below, otherwise Django tries to
     # resolve "catalogos/" as an admin app label and 404s.
