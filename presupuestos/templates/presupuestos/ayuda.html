@@ -13,6 +13,7 @@
     --crema: #f0e9d8;
     --texto: #2d2d2d;
     --borde: #dcdcdc;
+    --rojo: #b3261e;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -38,9 +39,9 @@
 
   .layout {
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 250px minmax(0, 1fr);
     gap: 32px;
-    max-width: 1140px;
+    max-width: 1160px;
     margin: 0 auto;
     padding: 24px 32px 64px;
   }
@@ -48,6 +49,8 @@
     position: sticky;
     top: 16px;
     align-self: start;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
     background: #fff;
     border: 1px solid var(--borde);
     border-radius: 10px;
@@ -86,7 +89,7 @@
   section h3 { color: var(--verde); font-size: 15px; margin: 18px 0 6px; }
   p, li { font-size: 14.5px; }
   p { margin: 8px 0; }
-  ul, ol { margin: 6px 0 6px 0; padding-left: 22px; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
   li { margin: 4px 0; }
   code, .tag {
     background: #f2f2ee;
@@ -94,11 +97,10 @@
     padding: 1px 6px;
     font-size: 13px;
   }
+  .rojo { color: var(--rojo); font-weight: 700; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-  .aviso-contadores {
-    border: 2px solid var(--naranja);
-    background: #fff8f3;
-  }
+  .aviso-contadores { border: 2px solid var(--naranja); background: #fff8f3; }
   .aviso-contadores h2 { color: #a0400f; }
   .banner {
     background: #fff8f3;
@@ -117,9 +119,49 @@
     margin: 10px 0;
     font-size: 14px;
   }
+  .ejemplo {
+    background: #fbf8ef;
+    border: 1px solid #e6dfcb;
+    border-radius: 8px;
+    padding: 4px 16px 10px;
+    margin: 12px 0;
+  }
+  .ejemplo h3 { margin-top: 10px; color: var(--verde-oscuro); }
+  .ejemplo .aviso-cifras { font-size: 12px; color: #888; margin: 0 0 2px; }
+
+  /* Flujo de punta a punta */
+  .flujo { list-style: none; padding: 0; margin: 12px 0; counter-reset: paso; }
+  .flujo li {
+    counter-increment: paso;
+    position: relative;
+    margin: 0 0 12px;
+    padding: 12px 14px 12px 56px;
+    background: #f7f9f8;
+    border: 1px solid #dfe9e7;
+    border-radius: 10px;
+  }
+  .flujo li:before {
+    content: counter(paso);
+    position: absolute;
+    left: 14px;
+    top: 12px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--verde);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .flujo li strong:first-child { display: block; color: var(--verde-oscuro); margin-bottom: 2px; }
+  .flujo li p { margin: 4px 0 0; font-size: 14px; }
 
   table { width: 100%; border-collapse: collapse; margin: 10px 0; }
   th { background: #f2f2ee; color: #555; text-align: left; padding: 8px 12px; font-size: 12px; text-transform: uppercase; }
+  th.num { text-align: right; }
   td { padding: 8px 12px; font-size: 14px; border-top: 1px solid #eee; vertical-align: top; }
 
   details.faq { border-top: 1px solid #eee; padding: 10px 0; }
@@ -128,8 +170,10 @@
 
   @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; padding: 16px; }
-    nav.indice { position: static; }
+    nav.indice { position: static; max-height: none; }
     header { padding: 14px 16px; }
+    section { padding: 18px 16px; }
+    table { display: block; overflow-x: auto; }
   }
   @media print {
     header, nav.indice, .banner { display: none; }
@@ -155,15 +199,18 @@
     <h2>Contenido</h2>
     <a href="#contadores" class="destacado">Aviso para contabilidad</a>
     <a href="#inicio">1. Qué es esta aplicación</a>
-    <a href="#conceptos">2. Conceptos clave</a>
-    <a href="#dashboard">3. El dashboard</a>
-    <a href="#detalle">4. Detalle de una semana</a>
-    <a href="#reportes">5. Reportes y PDF</a>
-    <a href="#por-cuenta">6. Presupuesto por cuenta</a>
-    <a href="#captura">7. Captura manual (administradores)</a>
-    <a href="#datos">8. De dónde salen los datos</a>
-    <a href="#faq">9. Preguntas frecuentes</a>
-    <a href="#glosario">10. Glosario</a>
+    <a href="#funcionamiento">2. Cómo funciona, paso a paso</a>
+    <a href="#conceptos">3. Conceptos clave</a>
+    <a href="#ejemplos">4. Ejemplos con números</a>
+    <a href="#dashboard">5. El dashboard</a>
+    <a href="#detalle">6. Detalle de una semana</a>
+    <a href="#reportes">7. Reportes y PDF</a>
+    <a href="#por-cuenta">8. Presupuesto por cuenta</a>
+    <a href="#tareas">9. Tareas comunes, paso a paso</a>
+    <a href="#captura">10. Captura manual (administradores)</a>
+    <a href="#datos">11. Cuándo se actualizan los datos</a>
+    <a href="#faq">12. Preguntas frecuentes</a>
+    <a href="#glosario">13. Glosario</a>
     <button type="button" onclick="window.print()">Imprimir esta ayuda</button>
   </nav>
 
@@ -174,6 +221,7 @@
     <div class="banner">
       ¿Trabajas en contabilidad y cargas presupuestos en Odoo?
       Lee primero el <a href="#contadores">aviso para contabilidad</a>.
+      ¿Quieres entender de dónde sale cada número? Ve a <a href="#funcionamiento">Cómo funciona</a> y a los <a href="#ejemplos">ejemplos con números</a>.
     </div>
 
     <section id="contadores" class="aviso-contadores">
@@ -189,7 +237,7 @@
       <ol>
         <li>Crear el presupuesto de cada <strong>empresa (sucursal)</strong> en Odoo. Cada sucursal es una empresa distinta y la aplicación las distingue así.</li>
         <li>Capturar las líneas <strong>por cuenta contable y por mes</strong>. Cada línea lleva su cuenta, su monto y la fecha del mes al que corresponde.</li>
-        <li>Cargar <strong>todos los meses</strong> que quieran ver. Hoy, por ejemplo, Las Antenas tiene de enero a mayo, Puebla agosto y septiembre, y Coyoacán agosto. Los meses que no estén cargados no tendrán presupuesto de Odoo (ver regla 3).</li>
+        <li>Cargar <strong>todos los meses</strong> que quieran ver. Los meses que no estén cargados no tendrán presupuesto de Odoo (ver regla 3).</li>
         <li>Esperar a la siguiente actualización automática: <strong>5:00 a.m. y 2:00 p.m.</strong>, todos los días. Un cambio hecho en Odoo no se ve al instante.</li>
       </ol>
 
@@ -200,6 +248,7 @@
         <li><strong>Odoo manda sobre lo capturado a mano.</strong> Para una sucursal y un mes que ya estén en Odoo, la aplicación ignora lo que se haya capturado manualmente aquí (no lo borra). Si un mes <em>no</em> está en Odoo, se usa lo capturado en la aplicación. Si no hay ninguno de los dos, ese mes aparece en $0.</li>
         <li><strong>Cuentas nuevas.</strong> Si usan un código de cuenta que la aplicación no conoce, se agrega solo. Algunos tipos se asignan automáticamente por familia de cuenta; el resto queda en blanco. Una cuenta sin tipo sí cuenta en el total de la sucursal, pero en la tabla "por tipo de gasto" aparece como <span class="tag">Sin categoría (sin clasificar)</span>. Avisen al administrador para que le asigne su tipo (Administrador &rsaquo; "Cuentas de presupuesto -&gt; tipo de gasto").</li>
         <li><strong>Nómina y personal.</strong> Está incluida en el presupuesto, pero la nómina no viene en las facturas de proveedor, así que "Nómina y Personal" siempre se ve muy por encima del gasto real. Es lo esperado.</li>
+        <li><strong>Sucursales nuevas.</strong> Una sucursal solo se ve en la aplicación si un administrador la tiene activa. Si abren una nueva y no la ven, avisen al administrador.</li>
       </ol>
 
       <h3>Cómo comprobar que quedó bien</h3>
@@ -213,24 +262,59 @@
     <section id="inicio">
       <h2>1. Qué es esta aplicación</h2>
       <p>
-        Compara, por sucursal, lo que se <strong>presupuestó</strong> contra lo que realmente se
-        <strong>pagó a proveedores</strong>, semana a semana, y por tipo de gasto.
+        Responde una pregunta: <strong>¿cada sucursal se está gastando lo que presupuestó?</strong>
+        Compara, semana a semana y por tipo de gasto, lo <strong>presupuestado</strong> contra lo que realmente se <strong>pagó a proveedores</strong>.
       </p>
       <ul>
         <li>El <strong>gasto real</strong> viene de Odoo: facturas de proveedor pagadas, línea por línea. Se actualiza solo, dos veces al día.</li>
         <li>El <strong>presupuesto</strong> viene de Odoo cuando la sucursal y el mes están cargados allá. Si no, es el que un administrador capturó en la aplicación.</li>
+        <li>La aplicación <strong>no sustituye a Odoo</strong>: no se registran facturas ni pagos aquí. Solo lee, ordena y compara.</li>
       </ul>
       <h3>Perfiles de usuario</h3>
       <table>
         <tr><th>Perfil</th><th>Qué puede hacer</th></tr>
-        <tr><td>Administrador</td><td>Todo lo del dashboard y los reportes, además del módulo Administrador: presupuestos manuales, tipos de gasto, catálogos y usuarios.</td></tr>
-        <tr><td>Usuario</td><td>Dashboard, detalle por semana y reportes de todas las sucursales.</td></tr>
+        <tr><td>Administrador</td><td>Todo lo del dashboard y los reportes, además del módulo Administrador: presupuestos manuales, tipos de gasto, catálogos, sucursales y usuarios.</td></tr>
+        <tr><td>Usuario</td><td>Dashboard, detalle por semana y reportes de todas las sucursales activas.</td></tr>
         <tr><td>Sucursal</td><td>Lo mismo, pero solo de su propia sucursal.</td></tr>
       </table>
     </section>
 
+    <section id="funcionamiento">
+      <h2>2. Cómo funciona, paso a paso</h2>
+      <p>Este es el recorrido que sigue un peso desde que se compra algo hasta que aparece en una tabla de la aplicación.</p>
+      <ol class="flujo">
+        <li>
+          <strong>En Odoo se compra, se recibe y se paga</strong>
+          <p>Se crea una orden de compra, llega la mercancía (recepción), el proveedor factura y se paga. Los servicios (renta, luz, etc.) se facturan y se pagan sin orden de compra. En paralelo, contabilidad carga en Odoo los presupuestos de cada sucursal.</p>
+        </li>
+        <li>
+          <strong>La aplicación lee Odoo dos veces al día</strong>
+          <p>A las 5:00 a.m. y a las 2:00 p.m. trae las facturas de proveedor pagadas, una fila por línea de factura, con su monto (con IVA), su orden de compra, su fecha de recepción y su fecha de pago. Después trae los presupuestos por cuenta.</p>
+        </li>
+        <li>
+          <strong>Cada línea se clasifica en un tipo de gasto</strong>
+          <p>Los gastos directos (renta, luz, etc.) se clasifican por su <em>cuenta contable</em>. Las compras que vienen de una orden de compra se clasifican por la <em>categoría del producto</em> comprado (carnes, bebidas, limpieza…). Lo que no tenga clasificación queda como <span class="tag">Sin categoría (sin clasificar)</span>.</p>
+        </li>
+        <li>
+          <strong>Cada línea se asigna a una semana (lunes a domingo)</strong>
+          <p>Si la factura tiene orden de compra, cuenta en la semana en que se recibió la mercancía. Si no, en la semana de su fecha de pago. Una compra cuya mercancía aún no se recibe todavía no se muestra.</p>
+        </li>
+        <li>
+          <strong>El presupuesto mensual se convierte en presupuesto semanal</strong>
+          <p>Cada mes se reparte en partes iguales entre sus días. La semana toma los días que le tocan. Si una sucursal y un mes están en Odoo, se usa el presupuesto de Odoo; si no, el que capturó un administrador.</p>
+        </li>
+        <li>
+          <strong>Se calcula el restante y se muestra</strong>
+          <p>Para cada sucursal y semana: <em>restante = presupuesto &minus; gasto real</em>. El dashboard, el detalle por semana, los reportes y el PDF salen todos de estos mismos números.</p>
+        </li>
+      </ol>
+      <div class="nota">
+        Consecuencia práctica: la aplicación siempre va un poco atrás de Odoo. Si algo cambió en Odoo hace una hora, se verá en la siguiente actualización (5:00 a.m. o 2:00 p.m.), no de inmediato.
+      </div>
+    </section>
+
     <section id="conceptos">
-      <h2>2. Conceptos clave</h2>
+      <h2>3. Conceptos clave</h2>
       <h3>La semana</h3>
       <p>Las semanas van de <strong>lunes a domingo</strong>. En pantalla cada semana se identifica por su lunes.</p>
 
@@ -247,10 +331,9 @@
         El presupuesto se define por mes. Cada mes se reparte en partes iguales entre sus días, y una semana toma los días que le tocan.
         Una semana que cruza dos meses mezcla el valor diario de ambos.
       </p>
-      <div class="nota">Ejemplo: la semana del 31 de agosto al 6 de septiembre toma 1 día de agosto y 6 días de septiembre.</div>
 
       <h3>Restante</h3>
-      <p><strong>Restante = presupuesto - gasto real.</strong> Si es negativo, se pasaron del presupuesto y se muestra en rojo.</p>
+      <p><strong>Restante = presupuesto &minus; gasto real.</strong> Si es negativo, se pasaron del presupuesto y se muestra en <span class="rojo">rojo</span>.</p>
 
       <h3>Tipo de gasto</h3>
       <p>
@@ -259,21 +342,111 @@
       </p>
     </section>
 
+    <section id="ejemplos">
+      <h2>4. Ejemplos con números</h2>
+      <p>Las cifras de estos ejemplos son inventadas, solo para mostrar cómo se calcula cada cosa.</p>
+
+      <div class="ejemplo">
+        <h3>Ejemplo 1. De presupuesto mensual a semanal</h3>
+        <p>Una sucursal tiene $300,000 de presupuesto en un mes de 30 días.</p>
+        <ul>
+          <li>Presupuesto por día: $300,000 &divide; 30 = <strong>$10,000</strong>.</li>
+          <li>Una semana completa dentro del mes: 7 días &times; $10,000 = <strong>$70,000</strong>.</li>
+        </ul>
+      </div>
+
+      <div class="ejemplo">
+        <h3>Ejemplo 2. Una semana que cruza dos meses</h3>
+        <p>La semana del lunes 31 de agosto al domingo 6 de septiembre.</p>
+        <table>
+          <tr><th>Mes</th><th class="num">Presupuesto del mes</th><th class="num">Días del mes</th><th class="num">Por día</th><th class="num">Días en la semana</th><th class="num">Aporta</th></tr>
+          <tr><td>Agosto</td><td class="num">$310,000</td><td class="num">31</td><td class="num">$10,000</td><td class="num">1</td><td class="num">$10,000</td></tr>
+          <tr><td>Septiembre</td><td class="num">$360,000</td><td class="num">30</td><td class="num">$12,000</td><td class="num">6</td><td class="num">$72,000</td></tr>
+          <tr><td colspan="5"><strong>Presupuesto de la semana</strong></td><td class="num"><strong>$82,000</strong></td></tr>
+        </table>
+      </div>
+
+      <div class="ejemplo">
+        <h3>Ejemplo 3. El restante</h3>
+        <p>Presupuesto de la semana: $70,000. Gasto real: $78,500.</p>
+        <p>Restante = $70,000 &minus; $78,500 = <span class="rojo">&minus;$8,500</span>. Se muestra en rojo porque se pasaron.</p>
+      </div>
+
+      <div class="ejemplo">
+        <h3>Ejemplo 4. ¿En qué semana cuenta cada factura?</h3>
+        <table>
+          <tr><th>Caso</th><th>Qué pasó</th><th>Semana en que cuenta</th></tr>
+          <tr><td>Compra de carne con orden de compra</td><td>Mercancía recibida el lunes 10 de agosto; la factura se pagó el 14 de septiembre.</td><td>La del <strong>10 de agosto</strong> (por la recepción).</td></tr>
+          <tr><td>Compra con orden de compra, mercancía aún no recibida</td><td>Factura pagada, pero Odoo no registra la recepción.</td><td><strong>Ninguna todavía.</strong> Aparecerá cuando se registre la recepción.</td></tr>
+          <tr><td>Renta (sin orden de compra)</td><td>Pagada el jueves 3 de septiembre.</td><td>La del lunes <strong>31 de agosto</strong> (por la fecha de pago).</td></tr>
+        </table>
+      </div>
+
+      <div class="ejemplo">
+        <h3>Ejemplo 5. El avance mensual</h3>
+        <p>Presupuesto del mes: $300,000. El gasto se va sumando semana a semana:</p>
+        <table>
+          <tr><th>Semana</th><th class="num">Gasto de la semana</th><th class="num">Gasto acumulado</th><th class="num">Restante acumulado</th></tr>
+          <tr><td>Semana 1</td><td class="num">$70,000</td><td class="num">$70,000</td><td class="num">$230,000</td></tr>
+          <tr><td>Semana 2</td><td class="num">$90,000</td><td class="num">$160,000</td><td class="num">$140,000</td></tr>
+          <tr><td>Semana 3</td><td class="num">$85,000</td><td class="num">$245,000</td><td class="num">$55,000</td></tr>
+          <tr><td>Semana 4</td><td class="num">$75,000</td><td class="num">$320,000</td><td class="num rojo">&minus;$20,000</td></tr>
+        </table>
+        <p>En cuanto el acumulado rebasa el presupuesto del mes, el restante pasa a negativo y se pone en rojo. Al empezar el siguiente mes, todo vuelve a empezar con su propio presupuesto: no se arrastra lo que sobró ni lo que faltó.</p>
+      </div>
+
+      <div class="ejemplo">
+        <h3>Ejemplo 6. El presupuesto capturado a mano "en blanco"</h3>
+        <p>Solo aplica a meses sin presupuesto en Odoo. Un administrador captura, para septiembre:</p>
+        <ul>
+          <li>Alimentos: $30,000 (con su propio renglón).</li>
+          <li>Sin tipo de gasto (en blanco): $60,000 = "todo lo demás".</li>
+        </ul>
+        <p>Si además hay gasto en 3 tipos que no tienen renglón propio (por ejemplo Bebidas, Servicios y Empaque), el monto en blanco se reparte en partes iguales entre ellos: $20,000 cada uno. Alimentos conserva sus $30,000. El total del mes sigue siendo $90,000.</p>
+        <p>Si ese mes hay gasto sin clasificar, ese renglón "sin clasificar" también recibe una parte igual del monto en blanco.</p>
+      </div>
+    </section>
+
     <section id="dashboard">
-      <h2>3. El dashboard</h2>
-      <ol>
-        <li><strong>Filtros (arriba).</strong> Elige una o varias sucursales en el menú desplegable (con atajos Todas / Ninguna), indica cuántas semanas atrás quieres ver y pulsa aplicar. La aplicación recuerda tu selección de sucursales aunque cambies de pantalla y regreses.</li>
-        <li><strong>Compras por sucursal (comparativo).</strong> Una línea por sucursal con el gasto real, en escala logarítmica. Sirve para comparar la forma de cada sucursal aunque una compre mucho más que otra. Para cifras exactas, usa las tablas.</li>
-        <li><strong>Una gráfica por sucursal.</strong> Gasto real, presupuesto y tendencia, en escala normal.</li>
-        <li><strong>Tabla "Presupuesto vs gasto real".</strong> Una fila por sucursal y semana, con presupuesto, gasto real y restante. Se agrupa por sucursal de forma predeterminada; el selector "Agrupar por" permite agruparla por semana. Haz clic en una fila para abrir el detalle de esa semana.</li>
-        <li><strong>Tabla "Por tipo de gasto".</strong> La misma comparación desglosada por tipo de gasto.</li>
-        <li><strong>Avance mensual del presupuesto.</strong> Para cada sucursal y mes: el gasto acumulado y lo que queda del presupuesto del mes, semana a semana. Se reinicia en cada mes (no se arrastra lo que sobró o faltó) y se pone en rojo cuando el restante es negativo.</li>
-      </ol>
+      <h2>5. El dashboard</h2>
+      <p>Es la pantalla principal. De arriba hacia abajo:</p>
+
+      <h3>Filtros</h3>
+      <ul>
+        <li><strong>Sucursales:</strong> menú desplegable con buscador y los atajos <em>Todas</em> y <em>Ninguna</em>. Cada casilla que marcas o desmarcas se aplica al instante; no hay botón de aplicar. Debajo aparece una etiqueta por cada sucursal elegida, con una &times; para quitarla.</li>
+        <li><strong>Últimas N semanas:</strong> cuántas semanas hacia atrás se muestran. También se aplica al cambiarlo.</li>
+        <li>La aplicación <strong>recuerda tu selección de sucursales</strong> aunque entres a un reporte y regreses.</li>
+        <li>Solo aparecen las sucursales <em>activas</em>. Si falta una, avisa a un administrador.</li>
+      </ul>
+
+      <h3>Gráficas</h3>
+      <ul>
+        <li><strong>Compras por sucursal (comparativo):</strong> una línea por sucursal con el gasto real, en escala <em>logarítmica</em>. Sirve para comparar la forma de cada sucursal aunque una compre mucho más que otra. Para cifras exactas, usa las tablas.</li>
+        <li><strong>Una gráfica por sucursal:</strong> gasto real, presupuesto y tendencia, en escala normal.</li>
+      </ul>
+
+      <h3>Tabla "Presupuesto vs. gasto real"</h3>
+      <table>
+        <tr><th>Columna</th><th>Qué significa</th></tr>
+        <tr><td>Sucursal</td><td>La sucursal.</td></tr>
+        <tr><td>Semana</td><td>El lunes de la semana (la semana va de lunes a domingo).</td></tr>
+        <tr><td>Presupuesto</td><td>Lo que le toca a esa semana del presupuesto del mes.</td></tr>
+        <tr><td>Gasto real</td><td>Lo pagado a proveedores que cuenta en esa semana.</td></tr>
+        <tr><td>Restante</td><td>Presupuesto menos gasto real. En rojo si es negativo.</td></tr>
+      </table>
+      <p>El selector <strong>Agrupar por</strong> cambia el orden: por sucursal (lo predeterminado) o por semana. Cada grupo se abre y se cierra. <strong>Haz clic en una fila para abrir el detalle de esa semana.</strong></p>
+
+      <h3>Tabla "Por tipo de gasto"</h3>
+      <p>La misma comparación, con una columna más (<em>Tipo de gasto</em>), para ver en qué rubro se está gastando de más. Su selector <strong>Agrupar por</strong> permite organizarla por tipo de gasto, sucursal o semana.</p>
+
+      <h3>Avance mensual del presupuesto</h3>
+      <p>Para cada sucursal y mes, semana a semana: <em>Gasto de la semana (en este mes)</em>, <em>Gasto acumulado del mes</em> y <em>Restante acumulado</em>. Se reinicia cada mes y se pone en rojo cuando el restante es negativo. Una semana que cruza dos meses aparece dos veces, una en cada mes. Ver el ejemplo 5.</p>
       <div class="nota">
         El avance mensual cuenta el gasto por <strong>fecha de pago</strong>, mientras que las tablas semanales cuentan las facturas con orden de compra por fecha de recepción.
         Por eso sus cifras pueden no coincidir al centavo en meses con facturas recibidas en un mes y pagadas en otro.
       </div>
-      <h3>Botones del dashboard</h3>
+
+      <h3>Botones junto a los filtros</h3>
       <ul>
         <li><strong>Exportar PDF:</strong> reporte ejecutivo con el filtro actual.</li>
         <li><strong>Reporte por proveedor:</strong> gasto por proveedor.</li>
@@ -283,47 +456,127 @@
     </section>
 
     <section id="detalle">
-      <h2>4. Detalle de una semana</h2>
-      <p>Se abre al hacer clic en una fila del dashboard. Muestra, para una sucursal y una semana:</p>
+      <h2>6. Detalle de una semana</h2>
+      <p>Se abre al hacer clic en una fila del dashboard. Es el lugar para averiguar <em>qué facturas componen</em> el gasto de una sucursal en una semana.</p>
       <ul>
-        <li>Tres indicadores: presupuesto, gasto real y restante.</li>
-        <li>Una gráfica de presupuesto contra gasto por tipo de gasto.</li>
-        <li>Los 10 proveedores con más gasto.</li>
-        <li>Dos tablas de facturas: una con el total por factura y otra línea por línea.</li>
+        <li><strong>Tres indicadores:</strong> Presupuesto, Gasto real y Restante de esa sucursal en esa semana.</li>
+        <li><strong>Presupuesto vs. gasto real por tipo de gasto:</strong> gráfica de barras para ver qué rubros se pasaron.</li>
+        <li><strong>Principales proveedores de la semana:</strong> los 10 con más gasto.</li>
+        <li><strong>Facturas de la semana (total por factura):</strong> una fila por factura.</li>
+        <li><strong>Facturas de la semana (por línea y tipo de gasto):</strong> una fila por cada línea de factura, con el tipo de gasto al que se asignó.</li>
       </ul>
-      <p>Cada factura muestra su <strong>orden de compra</strong> (o "N/A" si no tiene), la <strong>fecha de factura</strong>, la <strong>fecha de recepción</strong>, la <strong>fecha de pago</strong> y el <strong>estado de pago</strong>.</p>
+      <h3>Columnas de las tablas de facturas</h3>
+      <table>
+        <tr><th>Columna</th><th>Qué significa</th></tr>
+        <tr><td>Factura / Proveedor</td><td>Folio de la factura en Odoo y a quién se le compró.</td></tr>
+        <tr><td>Orden de compra</td><td>La orden de compra a la que está ligada. "N/A" si no tiene (por ejemplo, servicios).</td></tr>
+        <tr><td>Fecha de factura</td><td>El día que se emitió la factura. Es solo referencia.</td></tr>
+        <tr><td>Fecha de recepción</td><td>El día que llegó la mercancía. Si tiene orden de compra, esta fecha define la semana.</td></tr>
+        <tr><td>Fecha de pago</td><td>El día que se pagó. Si no tiene orden de compra, esta fecha define la semana.</td></tr>
+        <tr><td>Monto total / Monto</td><td>Importe con IVA de la factura completa, o de esa línea.</td></tr>
+        <tr><td>Tipo de gasto</td><td>(Solo en la tabla por línea) el rubro al que se asignó la línea.</td></tr>
+        <tr><td>Estado</td><td>El estado de pago de la factura en Odoo.</td></tr>
+      </table>
       <div class="nota">
         Una factura puede traer una fecha anterior al lunes de la semana y aun así estar en ella: la semana la define la recepción de la mercancía (o el pago, si no hay orden de compra), no la fecha de la factura.
       </div>
     </section>
 
     <section id="reportes">
-      <h2>5. Reportes y PDF</h2>
+      <h2>7. Reportes y PDF</h2>
+      <p>Todos los botones usan las sucursales y el número de semanas que tengas elegidos en el dashboard.</p>
       <h3>Exportar PDF</h3>
-      <p>Reporte ejecutivo del filtro actual (se abre en una pestaña nueva). Incluye: resumen con indicadores y comentario, mayores desviaciones, gráficas, anexos de detalle por sucursal, facturas pendientes de pago, proveedores de todas las sucursales (esta sección ignora el filtro de sucursal a propósito) y el avance mensual.</p>
+      <p>Reporte ejecutivo (se abre en una pestaña nueva), pensado para imprimir o enviar. Incluye: resumen con indicadores y comentario, mayores desviaciones, gráficas, anexos de detalle por sucursal, facturas pendientes de pago, proveedores de todas las sucursales (esta sección ignora el filtro de sucursal a propósito) y el avance mensual.</p>
       <h3>Reporte por proveedor</h3>
-      <p>Gasto por proveedor, sumando todas las sucursales seleccionadas y activas, agrupado por proveedor, semana y sucursal.</p>
+      <p>Gasto por proveedor, sumando todas las sucursales seleccionadas y activas, agrupado por proveedor, semana y sucursal. Útil para ver cuánto se le compra a cada proveedor en total.</p>
       <h3>Facturas pendientes</h3>
-      <p>Consulta en vivo a Odoo (no usa la sincronización diaria) de las facturas no pagadas o parcialmente pagadas, agrupadas por orden de compra y con el saldo que falta por pagar.</p>
+      <p>Consulta en vivo a Odoo (no usa la sincronización diaria) de las facturas no pagadas o parcialmente pagadas, agrupadas por orden de compra y con el saldo que falta por pagar. Útil para saber cuánto se debe hoy.</p>
     </section>
 
     <section id="por-cuenta">
-      <h2>6. Presupuesto por cuenta</h2>
+      <h2>8. Presupuesto por cuenta</h2>
       <p>
         Muestra el presupuesto tal como está en Odoo, ordenado por <strong>sucursal &rsaquo; mes &rsaquo; tipo de gasto &rsaquo; cuenta contable</strong>.
         A diferencia del dashboard, muestra todos los meses que Odoo tiene cargados, sin depender del filtro de semanas.
       </p>
       <ul>
-        <li>Marca las sucursales que quieras ver y pulsa Aplicar.</li>
-        <li>Cada mes se expande para ver sus tipos de gasto y, dentro de cada tipo, sus cuentas con su monto.</li>
+        <li>Marca las sucursales que quieras ver y pulsa <strong>Aplicar</strong>.</li>
+        <li>Cada sucursal se abre en meses, y cada mes en tipos de gasto con su subtotal; dentro de cada tipo, las cuentas con su código y su monto.</li>
+        <li>Los tipos y las cuentas aparecen ordenados del monto mayor al menor.</li>
         <li>Al final de la página se indica la última sincronización con Odoo.</li>
         <li>Solo se ven costos y gastos: los ingresos no se incluyen.</li>
       </ul>
       <p>Es una pantalla de consulta. Para cambiar un presupuesto, hay que hacerlo en Odoo.</p>
     </section>
 
+    <section id="tareas">
+      <h2>9. Tareas comunes, paso a paso</h2>
+
+      <h3>Ver cómo va una sucursal esta semana</h3>
+      <ol>
+        <li>En el dashboard, abre el menú <em>Sucursales</em>, pulsa <em>Ninguna</em> y marca solo esa sucursal.</li>
+        <li>Elige <em>Últimas 8 semanas</em> (o las que necesites).</li>
+        <li>En la tabla "Presupuesto vs. gasto real", busca la semana más reciente. Si el restante está en rojo, se pasaron.</li>
+        <li>Haz clic en la fila para ver el detalle: qué tipos de gasto se pasaron y qué facturas lo componen.</li>
+      </ol>
+
+      <h3>Saber si una sucursal va a pasarse del presupuesto del mes</h3>
+      <ol>
+        <li>En el dashboard, baja hasta <em>Avance mensual del presupuesto</em>.</li>
+        <li>Abre la sucursal y el mes actual.</li>
+        <li>Mira <em>Restante acumulado</em>: es lo que queda del presupuesto del mes. Si ya va a la mitad del mes y queda menos de la mitad, hay riesgo de pasarse.</li>
+      </ol>
+
+      <h3>Averiguar por qué una factura no aparece</h3>
+      <p>Revisa en este orden:</p>
+      <ol>
+        <li><strong>¿Es de 2026?</strong> Lo anterior al 1 de enero de 2026 no se actualiza.</li>
+        <li><strong>¿Está pagada?</strong> Solo se muestran facturas pagadas. Las que no se han pagado están en <em>Facturas pendientes</em>.</li>
+        <li><strong>¿Tiene orden de compra?</strong> Si sí, ¿ya se registró la recepción en Odoo? Sin recepción, no aparece.</li>
+        <li><strong>¿Estás viendo la semana correcta?</strong> Con orden de compra, la semana es la de la recepción, no la de la factura ni la del pago.</li>
+        <li><strong>¿La sucursal está seleccionada y activa?</strong> Revisa el filtro. Si no existe en el filtro, pide a un administrador que la active.</li>
+        <li><strong>¿Ya pasó una actualización?</strong> Si el pago o la recepción se registraron hace poco, espera a las 5:00 a.m. o a las 2:00 p.m.</li>
+      </ol>
+
+      <h3>Sacar el reporte para dirección</h3>
+      <ol>
+        <li>En el dashboard, elige las sucursales y el número de semanas.</li>
+        <li>Pulsa <em>Exportar PDF</em>. Se abre en una pestaña nueva.</li>
+        <li>Guárdalo o imprímelo desde el visor del navegador.</li>
+      </ol>
+
+      <h3>Ver el presupuesto de Odoo de una sucursal</h3>
+      <ol>
+        <li>En el dashboard, pulsa <em>Presupuesto por cuenta</em>.</li>
+        <li>Marca la sucursal y pulsa <em>Aplicar</em>.</li>
+        <li>Abre el mes que quieras revisar.</li>
+      </ol>
+
+      <h3>Dar de alta el presupuesto de una sucursal nueva (contabilidad)</h3>
+      <ol>
+        <li>En Odoo, crea el presupuesto de esa empresa con sus líneas por cuenta y por mes (ver el aviso para contabilidad, arriba).</li>
+        <li>Espera a la siguiente actualización (5:00 a.m. o 2:00 p.m.).</li>
+        <li>Comprueba en <em>Presupuesto por cuenta</em> que aparezcan sus meses.</li>
+      </ol>
+
+      <h3>Mostrar una sucursal que no aparece (administradores)</h3>
+      <ol>
+        <li>Entra a <strong>Administrador</strong> y abre <strong>Sucursales</strong>.</li>
+        <li>Marca la casilla <em>activa</em> de esa sucursal y pulsa Guardar (o selecciónala y usa la acción "Marcar como activa").</li>
+        <li>El cambio es inmediato: recarga el dashboard. No hay que esperar ninguna actualización.</li>
+      </ol>
+      <p>Las empresas nuevas de Odoo se agregan solas a la lista de sucursales (se revisan el día 1 de cada mes y cada vez que se actualiza la aplicación) y nacen activas. Si abre una sucursal en Odoo, aparece sola; solo hace falta intervenir para desactivar las que no se usan.</p>
+
+      <h3>Corregir un gasto "sin clasificar" (administradores)</h3>
+      <ol>
+        <li>Identifica qué cuenta o categoría de producto trae el gasto (en el detalle de la semana, tabla por línea).</li>
+        <li>En el módulo Administrador, asigna su tipo de gasto en "Cuentas contables -&gt; tipo de gasto" o en "Categorías de producto -&gt; tipo de gasto" (para presupuestos: "Cuentas de presupuesto -&gt; tipo de gasto").</li>
+        <li>Se aplica en la siguiente actualización.</li>
+      </ol>
+    </section>
+
     <section id="captura">
-      <h2>7. Captura manual del presupuesto (administradores)</h2>
+      <h2>10. Captura manual del presupuesto (administradores)</h2>
       <p>
         Solo se usa para sucursales y meses que <strong>no</strong> tienen presupuesto en Odoo.
         Donde Odoo ya lo tiene, lo capturado aquí se ignora (sin borrarse).
@@ -331,7 +584,7 @@
       <ol>
         <li>Entra a <strong>Administrador</strong> y, en <strong>Presupuestos</strong>, elige <em>Añadir presupuesto</em>.</li>
         <li><strong>Sucursal:</strong> la sucursal a la que aplica.</li>
-        <li><strong>Tipo de gasto:</strong> un tipo concreto, o déjalo <strong>en blanco</strong> para el total de "todo lo demás". El monto en blanco se reparte en partes iguales entre los tipos que no tengan su propio renglón ese mes.</li>
+        <li><strong>Tipo de gasto:</strong> un tipo concreto, o déjalo <strong>en blanco</strong> para el total de "todo lo demás" (ver el ejemplo 6). El monto en blanco se reparte en partes iguales entre los tipos que no tengan su propio renglón ese mes.</li>
         <li><strong>Mes:</strong> cualquier día del mes; se guarda como día 1.</li>
         <li><strong>Monto:</strong> el presupuesto de <strong>todo el mes</strong> (no semanal).</li>
         <li>Guarda. Solo puede haber un renglón por sucursal, tipo de gasto y mes: para corregir, edita el existente.</li>
@@ -341,38 +594,39 @@
       <ul>
         <li><strong>Tipos de gasto de las cuentas de presupuesto:</strong> en "Cuentas de presupuesto -&gt; tipo de gasto" se corrige o asigna el tipo de cada cuenta. Los cambios hechos aquí se respetan y no se sobrescriben.</li>
         <li><strong>Catálogos:</strong> el enlace "Catalogos" del módulo Administrador permite exportar e importar en Excel los tipos de gasto y sus relaciones con cuentas y categorías de producto.</li>
-        <li><strong>Sucursales:</strong> se pueden activar o desactivar desde el administrador.</li>
+        <li><strong>Sucursales:</strong> se activan o desactivan desde el administrador.</li>
       </ul>
     </section>
 
     <section id="datos">
-      <h2>8. De dónde salen los datos y cada cuánto se actualizan</h2>
+      <h2>11. Cuándo se actualizan los datos</h2>
       <table>
         <tr><th>Qué</th><th>Cuándo se actualiza</th></tr>
         <tr><td>Gasto real (facturas de proveedor)</td><td>Todos los días a las 5:00 a.m. y a las 2:00 p.m. Cada corrida revisa lo que cambió en Odoo en los últimos 30 días; el día 1 de cada mes se hace una revisión completa.</td></tr>
         <tr><td>Presupuestos de Odoo</td><td>Al terminar cada una de las corridas anteriores (5:00 a.m. y 2:00 p.m.).</td></tr>
-        <tr><td>Sucursales y clasificación de cuentas</td><td>El día 1 de cada mes.</td></tr>
+        <tr><td>Sucursales nuevas y clasificación de cuentas</td><td>El día 1 de cada mes.</td></tr>
+        <tr><td>Activar o desactivar una sucursal; capturas manuales</td><td>Al instante.</td></tr>
         <tr><td>Facturas pendientes</td><td>En vivo, cada vez que se abre el reporte.</td></tr>
       </table>
       <div class="nota">Si algo cambió en Odoo, aparecerá en la aplicación después de la siguiente actualización, no de inmediato.</div>
     </section>
 
     <section id="faq">
-      <h2>9. Preguntas frecuentes</h2>
+      <h2>12. Preguntas frecuentes</h2>
 
       <details class="faq">
         <summary>No veo el presupuesto de Odoo en el dashboard.</summary>
-        <p>El dashboard solo muestra las semanas del filtro. Si el presupuesto de Odoo es de meses anteriores (por ejemplo, Las Antenas de enero a mayo), sube el número de semanas hasta cubrirlos. Para ver todos los meses cargados en Odoo sin tocar filtros, usa <a href="{% url 'presupuesto_cuentas' %}">Presupuesto por cuenta</a>.</p>
+        <p>El dashboard solo muestra las semanas del filtro. Si el presupuesto de Odoo es de meses anteriores (por ejemplo, enero a mayo), sube el número de semanas hasta cubrirlos. Para ver todos los meses cargados en Odoo sin tocar filtros, usa <a href="{% url 'presupuesto_cuentas' %}">Presupuesto por cuenta</a>.</p>
       </details>
 
       <details class="faq">
         <summary>Una factura no aparece en la semana que esperaba.</summary>
-        <p>Si tiene orden de compra, cuenta en la semana en que se recibió la mercancía, y no aparece hasta que Odoo registre la recepción. Si no tiene orden de compra, cuenta en la semana de su fecha de pago. Los movimientos anteriores al 1 de enero de 2026 no se actualizan.</p>
+        <p>Si tiene orden de compra, cuenta en la semana en que se recibió la mercancía, y no aparece hasta que Odoo registre la recepción. Si no tiene orden de compra, cuenta en la semana de su fecha de pago. Los movimientos anteriores al 1 de enero de 2026 no se actualizan. Hay una lista de revisión completa en <a href="#tareas">Tareas comunes</a>.</p>
       </details>
 
       <details class="faq">
         <summary>Veo gasto o presupuesto en "Sin categoría (sin clasificar)".</summary>
-        <p>Es una cuenta contable o una categoría de producto sin tipo de gasto. Pide a un administrador que le asigne uno (para cuentas de presupuesto, en "Cuentas de presupuesto -&gt; tipo de gasto"; para gasto real, en el módulo de catálogos). Se corrige en la siguiente actualización.</p>
+        <p>Es una cuenta contable o una categoría de producto sin tipo de gasto. Pide a un administrador que le asigne uno. Se corrige en la siguiente actualización.</p>
       </details>
 
       <details class="faq">
@@ -392,7 +646,12 @@
 
       <details class="faq">
         <summary>¿Por qué el presupuesto de una semana que cruza dos meses es distinto al de las demás?</summary>
-        <p>Porque mezcla el valor diario de los dos meses (1 día de uno y 6 del otro, por ejemplo). Es el comportamiento esperado.</p>
+        <p>Porque mezcla el valor diario de los dos meses (1 día de uno y 6 del otro, por ejemplo). Ver el ejemplo 2.</p>
+      </details>
+
+      <details class="faq">
+        <summary>Una sucursal nueva ya opera pero sale sin cifras.</summary>
+        <p>Para tener cifras necesita dos cosas: presupuesto cargado en Odoo (o capturado a mano) y facturas de proveedor pagadas. Si compra pero aún no se registran las facturas, o si las compras no tienen recepción registrada, no habrá gasto real que mostrar.</p>
       </details>
 
       <details class="faq">
@@ -402,7 +661,7 @@
     </section>
 
     <section id="glosario">
-      <h2>10. Glosario</h2>
+      <h2>13. Glosario</h2>
       <table>
         <tr><th>Término</th><th>Significado</th></tr>
         <tr><td>Sucursal</td><td>Cada restaurante; corresponde a una empresa en Odoo.</td></tr>
@@ -414,6 +673,8 @@
         <tr><td>Fecha de recepción</td><td>Día en que se recibió la mercancía de la orden de compra.</td></tr>
         <tr><td>Fecha de pago</td><td>Día del pago de la factura (el más reciente si hubo varios).</td></tr>
         <tr><td>Cuenta contable</td><td>Cuenta de Odoo con su código (por ejemplo, 501.01.03). El código es el mismo en todas las empresas.</td></tr>
+        <tr><td>Sincronización</td><td>La lectura automática de Odoo que corre a las 5:00 a.m. y a las 2:00 p.m.</td></tr>
+        <tr><td>Sucursal activa</td><td>Una sucursal que un administrador dejó visible en la aplicación. Las inactivas no aparecen en el dashboard ni en los reportes.</td></tr>
       </table>
     </section>
   </main>
