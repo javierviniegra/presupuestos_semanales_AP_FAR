@@ -1,6 +1,8 @@
 # Project Context Report - Presupuestos AP (Sucursales)
 
-Last regenerated: 2026-10-05 (end of day, at the Odoo-budget-mirror handoff)
+Last updated: 2026-10-14 (regenerated in full 2026-10-05 at the Odoo-budget-mirror
+handoff; Sections 0 and 2 and the history refreshed since for the help page, the
+October-wave sucursales, the Wansoft milestone and the daily auto-update)
 Repo: https://github.com/javierviniegra/presupuestos_semanales_AP_FAR
 Local path (dev PC): `C:\Users\JavierViniegra\OneDrive - GRUPO FONDA ARGENTINA\Escritorio\AnalisisRestaurantesBI\ControlPresupuestos_AP`
 (moved here from `C:\Users\JavierViniegra\Desktop\AnalisisRestaurantesBI\ControlPresupuestos_AP`
@@ -16,30 +18,61 @@ stays in English even though the working conversation with the user is Spanish.
 Standing handoff rule (applies to every FONDA project): when the owner says
 the context is exhausted, ALWAYS (1) regenerate this file in full, (2) write
 the handoff prompt, (3) suggest the new chat title in the format
-`FONDA (proyecto corto): Paso N[-M]: <short description>`, (4) commit and push
-if needed (English message, no secrets), and stop any running dev server.
+`FONDA (<project name>): Paso N[-M]: <short description>` (use this project's
+real name, e.g. "Presupuestos AP"; never write the words "proyecto corto"
+literally), (4) commit and push if needed (English message, no secrets), and
+stop any running dev server. Since 2026-10-14 a push to main reaches production
+at the next 04:30, so say so before pushing.
 
 ---
 
 ## 0. Where we stand (read this first)
 
 ```text
-Latest commit on main: 9e089c2 "mirror Odoo's account budgets and use them in
-the reports" (pushed). Dev: fully verified. Production: VERIFIED on
-2026-10-06 - the owner ran git pull and migrate (0014) on 2026-10-05, and a
-one-time scheduled task ran update.ps1 at 05:30 on 2026-10-06; Waitress
-restarted, the "Presupuesto por cuenta" button shows, and the page lists the
-Odoo budgets for the three sucursales, matching Odoo.
+Latest feature commit on main: 6244c67 (daily auto-update of production).
+Everything is pushed, and production is on the same code (the owner ran
+update.ps1 by hand after the help-page commits; the auto-update task is
+registered and verified). Dev: fully verified.
 ```
 
-Update 2026-10-06: the one-time task "ControlPresupuestos_AP - Actualizacion
-unica" ran update.ps1 on the prod VM at 05:30 (result 0). Production now has
-the new code, the "Presupuesto por cuenta" button, and the Odoo budgets
-(402 rows, confirmed in the scheduler log and on the page; Antenas Jan-May,
-Puebla Aug-Sep, Coyoacan Aug). The dashboard only shows Odoo budgets for weeks
-inside those months; recent weeks use the manual budget. The in-app help page
-(/ayuda/) was built the same day (committed locally; needs push + update.ps1
-on the VM to reach production).
+What happened since the Odoo-budget-mirror handoff (2026-10-05):
+- 2026-10-06: the one-time task ran update.ps1 on the prod VM at 05:30; the
+  "Presupuesto por cuenta" button and the Odoo budgets (402 rows: Antenas
+  Jan-May, Puebla Aug-Sep, Coyoacan Aug) show in production, matching Odoo. The
+  dashboard shows Odoo budgets only for weeks inside those months; recent weeks
+  use the manual budget.
+- In-app help page `/ayuda/` (commits e4f8c84, cef72d9): user manual with an
+  end-to-end walkthrough, six worked examples, column-by-column table
+  explanations and step-by-step task guides, FAQ, glossary, plus a highlighted
+  notice for the accountants who load budgets in Odoo. Login required. Linked
+  from the dashboard, the budget-by-account page and the admin top bar.
+- The three October-wave sucursales (company 5 "FONDA ARGENTINA" - presumably
+  Isabel La Catolica, the owner wrote "Fonda Argentina -o Isabel-" -, company 6
+  San Jeronimo, company 17 Vallejo) existed in the app but
+  were `activa = False`, so they did not show anywhere (dashboard, reports and
+  "Presupuesto por cuenta" list only active sucursales). The owner activated them
+  in production on 2026-10-06 (takes effect immediately). They still show no
+  figures: Odoo has no budget for them (only Antenas, Puebla and Coyoacan have
+  one) and almost no posted vendor bills yet (purchase orders exist: 53 / 90 /
+  31 since September). Needs: accountants load their budgets in Odoo, and their
+  vendor bills get posted and paid. New Odoo companies are created active by
+  `sync_sucursales.py`; the inactive flags were set by an admin.
+- 2026-10-14: production now updates itself daily (see Section 2).
+
+Optional follow-ups, none requested yet (ask before touching any):
+1. Store the Odoo account on `GastoReal` to compare actual spend per account
+   against the per-account budget (see Section 7).
+2. Decide whether `_avance_mensual` should use `fecha_recepcion` for PO lines.
+3. Update the manuals for the new screens (Spanish ones are local only).
+4. The dashboard "Nomina y Personal" budget runs far above actual, because
+   payroll accounts are imported but payroll is not in vendor bills (the
+   owner chose "all costs and expenses" knowingly).
+5. The owner mentioned a "fase 2" earlier; it has no defined scope yet.
+6. **Next milestone, owner announced 2026-10-06:** bring the branches that are
+   not in Odoo but are in Wansoft into this app, using the new database of
+   canonical and analytic tables built in the Wansoft project. Not started;
+   explore that schema read-only first. This replaces the old "Excel in
+   SharePoint" idea below.
 
 Optional follow-ups, none requested yet (ask before touching any):
 1. Store the Odoo account on `GastoReal` to compare actual spend per account
@@ -73,8 +106,10 @@ Week-detail drill-down, cross-branch provider report, pending-invoices report
   "Presupuesto por cuenta" page (Odoo budget by account).
 ```
 
-Deferred (not started): branches not on Odoo will read data from an Excel file
-in SharePoint; format/source not discussed.
+Next (not started): branches that are not on Odoo but are on Wansoft will be
+read from the new Wansoft database of canonical and analytic tables (owner,
+2026-10-06; replaces the earlier "Excel in SharePoint" idea). Schema not
+explored yet.
 
 ## 2. Architecture and environments
 
@@ -98,12 +133,17 @@ Numbers:  django.contrib.humanize (intcomma) everywhere
 - Kill stale servers BY PROCESS PATH, not port:
   `Get-Process python | Where-Object { $_.Path -like "*ControlPresupuestos_AP*" } | Stop-Process -Force`
   then start fresh. Do it after every template/view/model edit before testing.
-- mysqld crash root cause (fixed 2026-09-07): native-AIO assertion
-  (`os0file.cc`), not Aria corruption. Fix is `innodb_use_native_aio=0` under
-  `[mysqld]` in `C:\xampp\mysql\bin\my.ini` (outside the repo - re-add if XAMPP
-  is reinstalled). If Aria corruption ever recurs: delete
-  `C:\xampp\mysql\data\aria_log.*` + `aria_log_control`, then `aria_chk.exe -r`
-  on the crashed table with mysqld stopped.
+- mysqld crash history: before 2026-09-07 mysqld crashed on a native-AIO
+  assertion (`os0file.cc`, "slot"). The 2026-09-07 "fix"
+  `innodb_use_native_aio=0` in `C:\xampp\mysql\bin\my.ini` turned out WORSE: every
+  later incident (09-08 to 10-13) was InnoDB page corruption under heavy writes.
+  It was reverted to `1` on 2026-10-14 and dev has been stable since. **Keep
+  `innodb_use_native_aio=1`; never set it to 0 again.** If the "slot" assertion
+  returns, move dev to a modern MariaDB (10.11/11.4) instead. `my.ini` is outside
+  the repo: if XAMPP is reinstalled, recheck that line. If Aria corruption recurs
+  after an unclean stop: move `C:\xampp\mysql\data\aria_log.*` +
+  `aria_log_control` aside, then `aria_chk.exe -o` the damaged tables with mysqld
+  stopped.
 
 ### Production (two machines, no remote access from this session)
 ```text
@@ -123,13 +163,31 @@ Public URL: http://187.251.203.223:8088/presupuestos_ap/
 - **Waitress is a plain background process with no auto-reload. After any
   `git pull`, code changes take effect only after `.\deploy\update.ps1`
   restarts it.** (This caused a "I don't see the new columns" report.)
-- Windows Scheduled Tasks on prod: Gastos reales AM (5:00), PM (14:00),
-  Catalogos mensual (day 1, 04:00), and "Arranque automatico" (AtStartup, runs
-  as SYSTEM, runs update.ps1 so a reboot restarts the server). Both dev and
-  prod run the full schedule against the same prod DB - deliberate redundancy,
-  each sync is an idempotent upsert.
-- The owner runs every production command by hand, guided step by step. Any
-  production-affecting change needs explicit confirmation first.
+- **Production deploys itself (since 2026-10-14, commit 6244c67):** the task
+  "ControlPresupuestos_AP - Actualizar" runs daily at 04:30
+  (`deploy\actualizar_diario.ps1`): `git fetch`, and only if `origin/main` has
+  new commits it runs `deploy\update.ps1`; otherwise it logs "No changes" and
+  does not touch the server. **So a push to `main` reaches production by the next
+  04:30 - a push is now production-affecting.** Log: `logs\update.log` ("No
+  changes (hash)", "Updating a -> b", then "Done at ..." or "FAILED: ..."; full
+  per-run output in `logs\update_<date>.*.log`, kept 30 days). It marks FAILED
+  when the code did not reach origin/main, when update.ps1 printed its "port is
+  not responding" warning, or when a step printed a Python traceback. A failed
+  update is NOT retried the next day (no new commit): fix the cause and run
+  `deploy\update.ps1` by hand. Registered with
+  `deploy\registrar_tarea_actualizacion.ps1` (admin PowerShell; S4U as the owner's
+  user, runs without anyone logged on). Verified on the VM 2026-10-14: a manual
+  trigger logged "No changes (6244c67)". Rationale in `docs/DECISIONS.md`.
+- Windows Scheduled Tasks on prod: Actualizar (daily 04:30), Gastos reales AM
+  (5:00), PM (14:00), Catalogos mensual (day 1, 04:00), and "Arranque
+  automatico" (AtStartup, runs as SYSTEM, runs update.ps1 so a reboot restarts
+  the server). "Actualizacion unica" (one-time, used 2026-10-06) is no longer
+  needed and can be deleted. Both dev and prod run the full sync schedule
+  against the same prod DB - deliberate redundancy, each sync is an idempotent
+  upsert.
+- The owner runs every production command by hand, guided step by step, except
+  the daily auto-update above. Any production-affecting change needs explicit
+  confirmation first.
 - First-time production setup lives in `deploy/PRODUCTION_SETUP.md`.
 
 ### Scheduled tasks (dev, prefix "ControlPresupuestos_AP - ")
@@ -357,7 +415,11 @@ commit with what was verified -> push -> restart the dev server.
 
 Docs in the repo: `README.md`, `docs/USER_GUIDE.md` (3 usage profiles; notes
 that Odoo budgets override manual ones), English configuration and admin-module
-manuals (HTML + PDF) with `docs/screenshots/`, `deploy/PRODUCTION_SETUP.md`.
+manuals (HTML + PDF) with `docs/screenshots/`, `deploy/PRODUCTION_SETUP.md`
+(section 9 = the daily auto-update), `docs/DECISIONS.md` (decisions with the
+owner and why, newest first; created 2026-10-14). The in-app help (`/ayuda/`)
+is a separate, Spanish-only copy of the user manual: edit
+`presupuestos/templates/presupuestos/ayuda.html` when behavior changes.
 Not yet covering the Odoo budget mirror: the Spanish manuals and the English
 admin-modules manual (no `PresupuestoCuenta` / `CuentaPresupuestoTipoGasto`
 screens, no "Presupuesto por cuenta" page).
@@ -365,6 +427,10 @@ screens, no "Presupuesto por cuenta" page).
 ## 10. Git history (most recent first, all pushed)
 
 ```text
+6244c67  feat(deploy): update production automatically every day
+cef72d9  docs(ayuda): explain how the app operates, with worked examples and task guides
+e4f8c84  feat(ayuda): add in-app help page with user manual and accountants notice
+10876f8  docs(project): regenerate context report for the Odoo-budget-mirror handoff
 9e089c2  feat(presupuestos): mirror Odoo's account budgets and use them in the reports
 c4953c5  fix(detalle_semana): actually show the fecha_recepcion column
 726807f  feat(dashboard): remember sucursal filter, default the main table to sucursal grouping
@@ -396,14 +462,20 @@ Paso 2: Data model, Odoo sync, dashboard, reports, PDF, budget capture, data-acc
         fixes - closed in practice.
 Paso 3: Monthly capture, docs, catalog Excel tool, production deployment, scheduler
         performance, PO-receipt week rule, dashboard memory - done.
-Paso 4: Odoo budgets by account (this handoff) - built and pushed; production
-        verification pending.
+Paso 4: Odoo budgets by account, in-app help, daily production auto-update -
+        done and verified in production (2026-10-05 to 2026-10-14).
+Paso 5: not started - Wansoft-only branches into this app (see Section 0).
 ```
 Step numbers are tentative; the owner keeps their own count in the chat titles.
 
 ## 12. Open questions (not decided with the owner)
 
 - The "fase 2" scope.
+- Wansoft-only branches: schema of the new canonical/analytic database, how its
+  spend maps to GastoReal (week rule, tipo_gasto, 2026-01-01 cutoff), and how
+  budgets apply to them.
+- The three October-wave sucursales have no budget in Odoo yet and almost no
+  posted vendor bills: accountants must load their budgets in Odoo.
 - Whether `_avance_mensual` should bucket PO lines by receipt date.
 - Per-account actual-vs-budget comparison (needs the account on GastoReal).
 - `monto_pagado` reliability and multi-payment week splitting.
