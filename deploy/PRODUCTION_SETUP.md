@@ -195,14 +195,59 @@ Only do this if production should sync independently from dev - if dev's
 schedule already feeds the same production database, skip this section
 entirely to avoid syncing twice.
 
-## Known limitation: does not survive a VM reboot on its own
+## 9. Daily automatic update from GitHub (app VM)
 
-`update.ps1` starts Waitress as a plain background process. If the app VM
-restarts, nothing brings it back automatically - someone has to run
-`deploy\update.ps1` again by hand. If that's not acceptable, the two ways
-to fix it (not set up yet, ask if you want either):
+Instead of running `update.ps1` by hand after every push, register one
+Scheduled Task that does it every day at 04:30 (between the monthly catalog
+task at 04:00 and the Gastos reales sync at 05:00):
 
-- A Windows Scheduled Task with an "At startup" trigger that runs
-  `deploy\update.ps1`.
-- Wrapping Waitress as a real Windows Service (e.g. via NSSM), which also
-  restarts it automatically if the process crashes, not just on reboot.
+```powershell
+cd C:\Apps\ControlPresupuestos_AP
+git pull origin main
+```
+
+```powershell
+# in an ADMINISTRATOR PowerShell, from the project folder
+.\deploy\registrar_tarea_actualizacion.ps1
+```
+
+(The `git pull` first is needed once: the two scripts are part of the repo,
+so the VM has to have them before it can register the task.)
+
+What the task does, every day: `deploy\actualizar_diario.ps1` fetches GitHub
+and **only when `main` has new commits** runs `deploy\update.ps1` (pull,
+dependencies, migrations, sucursal and budget sync, static files, restart
+Waitress). With nothing new it just logs "No changes" and exits - the server is
+not touched. It runs as the current user with logon type S4U, so it works
+without anyone logged on and without storing a password. Re-running the
+registration script replaces the task.
+
+Check it:
+
+```powershell
+Get-ScheduledTask -TaskName "ControlPresupuestos_AP - Actualizar" | Get-ScheduledTaskInfo
+Get-Content C:\Apps\ControlPresupuestos_AP\logs\update.log -Tail 20
+```
+
+`logs\update.log` has one line per run: `No changes (abc1234)`, or
+`Updating abc1234 -> def5678` followed by the full output of `update.ps1` and
+a final `Done at def5678` or `FAILED: ...`. A FAILED line means the update
+did not fully work (the new code did not arrive, the server does not answer
+after the restart, or a step printed a Python traceback): read the lines above
+it and `logs\waitress.err.log`. The task does not retry on its own - the next
+run finds no new commits - so fix the cause and run `deploy\update.ps1` by
+hand. To run it right now without waiting for 04:30:
+`Start-ScheduledTask -TaskName "ControlPresupuestos_AP - Actualizar"`.
+
+Why these details, and how they differ from a plain `update.ps1` call, are in
+[docs/DECISIONS.md](../docs/DECISIONS.md) (2026-10-14).
+
+## Surviving a VM reboot
+
+`update.ps1` starts Waitress as a plain background process, so a VM restart
+does not bring the app back by itself. On the production VM this is covered by
+the Scheduled Task **"ControlPresupuestos_AP - Arranque automatico"** (trigger:
+at startup, runs as SYSTEM, runs `deploy\update.ps1`), registered on
+2026-09-09. It does not restart Waitress if the process merely crashes without
+a reboot; for that, the alternative is to wrap Waitress as a real Windows
+Service (e.g. via NSSM). Not set up - ask if you want it.

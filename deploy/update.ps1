@@ -1,8 +1,13 @@
 # deploy/update.ps1
 #
-# Run this by hand on the production VM whenever there's a new version to
-# deploy. Pulls the latest code from GitHub, installs any new dependencies,
-# applies migrations, refreshes static files, then restarts the server.
+# Deploys the latest version on the production VM. Pulls the latest code from
+# GitHub, installs any new dependencies, applies migrations, refreshes static
+# files, then restarts the server.
+#
+# Normally nobody runs it: the daily Scheduled Task "ControlPresupuestos_AP -
+# Actualizar" (deploy\actualizar_diario.ps1, 04:30) runs it when main has new
+# commits, and "Arranque automatico" runs it when the VM starts. Run it by hand
+# to deploy right now or to retry after a FAILED line in logs\update.log.
 #
 # First-time setup (cloning the repo, creating the venv, .env, initial
 # migrate/createsuperuser) is NOT part of this script - see

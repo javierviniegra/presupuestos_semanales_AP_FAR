@@ -46,9 +46,12 @@ Dev: local machine, test MySQL database, `manage.py runserver 8010`.
 Prod: Windows VM at 187.251.203.223 (also runs XAMPP and a couple of
       standalone Python/Gradio apps). Served by Waitress on its own port,
       no IIS/nginx in front; WhiteNoise serves static files directly.
-      Updated by pulling from GitHub and running `deploy\update.ps1` -
-      see [deploy/PRODUCTION_SETUP.md](deploy/PRODUCTION_SETUP.md) for the
-      one-time setup and the update script.
+      Updates itself: a daily Scheduled Task (04:30) fetches GitHub and,
+      only when main has new commits, runs `deploy\update.ps1` (pull,
+      migrations, syncs, restart); log in `logs\update.log`. A manual run
+      of `deploy\update.ps1` does the same on demand. See
+      [deploy/PRODUCTION_SETUP.md](deploy/PRODUCTION_SETUP.md) for the
+      one-time setup and the scheduled task.
 ```
 
 Only actions that touch the production server or the production database
@@ -94,7 +97,11 @@ Port 8010 is used instead of Django's default 8000 because 8000 is already taken
   a screenshot-by-screenshot walkthrough of every module under
   `/admin/`. Same Spanish-version-kept-local pattern as above.
 - [deploy/PRODUCTION_SETUP.md](deploy/PRODUCTION_SETUP.md): one-time
-  production setup and the [update.ps1](deploy/update.ps1) script used for
-  every deploy after that.
+  production setup, the [update.ps1](deploy/update.ps1) script used for
+  every deploy after that, and the daily automatic update
+  ([actualizar_diario.ps1](deploy/actualizar_diario.ps1), registered with
+  [registrar_tarea_actualizacion.ps1](deploy/registrar_tarea_actualizacion.ps1)).
+- [docs/DECISIONS.md](docs/DECISIONS.md): decisions taken with the owner and
+  why, newest first.
 - [PROJECT_CONTEXT_REPORT.md](PROJECT_CONTEXT_REPORT.md): architecture and
   data model reference, kept up to date for session handoffs.
